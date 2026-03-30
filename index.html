@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oles Spiele</title>
+  <link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0b1e;
+      --neon-green: #b8ff3e;
+      --neon-pink: #ff3eb8;
+      --neon-blue: #3eb8ff;
+      --neon-yellow: #ffe83e;
+      --card-bg: #1a1730;
+      --text: #f0ecff;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Nunito', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* Custom cursor */
+    .cursor {
+      width: 18px; height: 18px;
+      background: var(--neon-green);
+      border-radius: 50%;
+      position: fixed;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      transition: background 0.2s, transform 0.1s;
+      mix-blend-mode: screen;
+    }
+
+    /* Star field background */
+    .stars {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .star {
+      position: absolute;
+      width: 2px; height: 2px;
+      background: white;
+      border-radius: 50%;
+      opacity: 0;
+      animation: twinkle var(--d, 3s) var(--delay, 0s) infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0; transform: scale(1); }
+      50% { opacity: var(--op, 0.8); transform: scale(1.5); }
+    }
+
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    /* Layout */
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 1rem;
+      animation: fadeDown 0.7s ease both;
+    }
+
+    .logo-pre {
+      font-family: 'Nunito', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--neon-pink);
+      text-shadow: 0 0 10px var(--neon-pink);
+      margin-bottom: 0.4rem;
+    }
+
+    h1 {
+      font-family: 'Boogaloo', cursive;
+      font-size: clamp(4rem, 12vw, 8rem);
+      line-height: 0.95;
+      color: var(--neon-green);
+      text-shadow:
+        0 0 20px var(--neon-green),
+        0 0 60px rgba(184,255,62,0.4),
+        4px 4px 0 #2a4a00;
+      letter-spacing: 0.02em;
+    }
+
+    .tagline {
+      margin-top: 1rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--neon-blue);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    /* Pixel divider */
+    .pixel-divider {
+      display: flex;
+      gap: 6px;
+      margin: 2.5rem 0;
+      animation: fadeIn 0.9s 0.3s ease both;
+    }
+    .pixel-divider span {
+      width: 12px; height: 12px;
+      background: var(--neon-yellow);
+      box-shadow: 0 0 8px var(--neon-yellow);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+    .pixel-divider span:nth-child(2) { animation-delay: 0.2s; background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); }
+    .pixel-divider span:nth-child(3) { animation-delay: 0.4s; background: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
+    .pixel-divider span:nth-child(4) { animation-delay: 0.6s; }
+    .pixel-divider span:nth-child(5) { animation-delay: 0.8s; background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); }
+    .pixel-divider span:nth-child(6) { animation-delay: 1.0s; background: var(--neon-blue); box-shadow: 0 0 8px var(--neon-blue); }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    /* Game cards */
+    .games {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 380px));
+      gap: 2rem;
+      justify-content: center;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .game-card {
+      position: relative;
+      background: var(--card-bg);
+      border: 2px solid transparent;
+      border-radius: 4px;
+      padding: 2.5rem 2rem 2rem;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      overflow: hidden;
+      animation: fadeUp 0.7s ease both;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .game-card:nth-child(1) { animation-delay: 0.4s; --accent: var(--neon-green); --accent2: #2a4a00; }
+    .game-card:nth-child(2) { animation-delay: 0.55s; --accent: var(--neon-pink); --accent2: #4a0030; }
+    .game-card:nth-child(3) { animation-delay: 0.7s; --accent: var(--neon-blue); --accent2: #003a4a; }
+
+    /* Animated border */
+    .game-card::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--accent), transparent, var(--accent));
+      background-size: 200% 100%;
+      animation: borderSlide 2.5s linear infinite;
+      z-index: -1;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .game-card:hover::before { opacity: 1; }
+    @keyframes borderSlide {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 200% 0%; }
+    }
+
+    /* Corner decorations */
+    .game-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at top left, rgba(255,255,255,0.03), transparent 60%);
+      pointer-events: none;
+    }
+
+    .game-card:hover {
+      transform: translateY(-6px) scale(1.02);
+      box-shadow:
+        0 20px 60px rgba(0,0,0,0.5),
+        0 0 40px color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+
+    /* Game icon */
+    .game-icon {
+      width: 90px; height: 90px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
+      border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+      box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 20%, transparent);
+      transition: box-shadow 0.3s;
+      position: relative;
+    }
+    .game-card:hover .game-icon {
+      box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+
+    /* Pixel art-style decoration top-right of icon */
+    .badge {
+      position: absolute;
+      top: -6px; right: -6px;
+      width: 18px; height: 18px;
+      background: var(--accent);
+      border-radius: 2px;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .game-title {
+      font-family: 'Boogaloo', cursive;
+      font-size: 2.2rem;
+      color: var(--accent);
+      text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
+      text-align: center;
+      letter-spacing: 0.04em;
+    }
+
+    .game-desc {
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: rgba(240,236,255,0.65);
+      text-align: center;
+      max-width: 28ch;
+    }
+
+    .play-btn {
+      margin-top: 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: 'Nunito', sans-serif;
+      font-weight: 900;
+      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0.6rem 1.6rem;
+      border-radius: 2px;
+      transition: box-shadow 0.2s, transform 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .play-btn::after {
+      content: '▶';
+      font-size: 0.7rem;
+    }
+    .game-card:hover .play-btn {
+      box-shadow: 0 0 24px var(--accent), 0 6px 20px rgba(0,0,0,0.4);
+      transform: scale(1.05);
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 4rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: rgba(240,236,255,0.3);
+      letter-spacing: 0.1em;
+      animation: fadeIn 1s 0.8s ease both;
+    }
+    footer span {
+      color: var(--neon-pink);
+      text-shadow: 0 0 6px var(--neon-pink);
+    }
+
+    /* Animations */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Floating coins */
+    .coin {
+      position: fixed;
+      font-size: 1.2rem;
+      pointer-events: none;
+      z-index: 0;
+      animation: floatUp linear both;
+      opacity: 0;
+    }
+    @keyframes floatUp {
+      0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+      10%  { opacity: 1; }
+      90%  { opacity: 0.6; }
+      100% { opacity: 0; transform: translateY(-120vh) rotate(720deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="stars" id="stars"></div>
+
+<main class="page">
+  <header>
+    <p class="logo-pre">✦ Willkommen bei ✦</p>
+    <h1>Oles<br>Spiele</h1>
+    <p class="tagline">Wähle dein Abenteuer</p>
+  </header>
+
+  <div class="pixel-divider" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <section class="games">
+
+    <a href="lizzard.html" class="game-card" id="card-lizzard">
+      <div class="game-icon">🦎<div class="badge"></div></div>
+      <h2 class="game-title">Lizzard</h2>
+      <p class="game-desc">Schlüpf in die Schuppen eines listigen Eidechsen-Abenteurers. Renn, spring, überlebe!</p>
+      <div class="play-btn">Spielen</div>
+    </a>
+
+    <a href="superole.html" class="game-card" id="card-superole">
+      <div class="game-icon">⭐<div class="badge"></div></div>
+      <h2 class="game-title">Super Ole</h2>
+      <p class="game-desc">Das ultimative Plattform-Spektakel. Springe höher, laufe schneller, werde zur Legende!</p>
+      <div class="play-btn">Spielen</div>
+    </a>
+
+    <a href="labyrinth.html" class="game-card" id="card-labyrinth">
+      <div class="game-icon">🌀<div class="badge"></div></div>
+      <h2 class="game-title">Labyrinth</h2>
+      <p class="game-desc">Finde den Weg durch das verworrene Labyrinth. Denk schnell, dreh dich nicht im Kreis!</p>
+      <div class="play-btn">Spielen</div>
+    </a>
+
+  </section>
+
+  <footer>
+    &copy; 2026 <span>Oles Spiele</span> &mdash; Alle Rechte vorbehalten
+  </footer>
+</main>
+
+<script>
+  // Custom cursor
+  const cursor = document.getElementById('cursor');
+  document.addEventListener('mousemove', e => {
+    cursor.style.left = e.clientX + 'px';
+    cursor.style.top  = e.clientY + 'px';
+  });
+  document.querySelectorAll('a').forEach(a => {
+    a.addEventListener('mouseenter', () => cursor.style.transform = 'translate(-50%,-50%) scale(2)');
+    a.addEventListener('mouseleave', () => cursor.style.transform = 'translate(-50%,-50%) scale(1)');
+  });
+
+  // Stars
+  const starsEl = document.getElementById('stars');
+  for (let i = 0; i < 120; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.cssText = `
+      left:${Math.random()*100}%;
+      top:${Math.random()*100}%;
+      --d:${2+Math.random()*4}s;
+      --delay:${Math.random()*5}s;
+      --op:${0.4+Math.random()*0.6};
+      width:${1+Math.random()*2}px;
+      height:${1+Math.random()*2}px;
+    `;
+    starsEl.appendChild(s);
+  }
+
+  // Floating coins on card click
+  const emojis = ['⭐','🌟','💎','🔥','✨','🎮','🕹️'];
+  document.querySelectorAll('.game-card').forEach(card => {
+    card.addEventListener('click', e => {
+      for (let i = 0; i < 8; i++) {
+        const coin = document.createElement('div');
+        coin.className = 'coin';
+        coin.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        coin.style.cssText = `
+          left: ${e.clientX + (Math.random()-0.5)*80}px;
+          top: ${e.clientY}px;
+          animation-duration: ${1.5 + Math.random()}s;
+          animation-delay: ${Math.random()*0.3}s;
+          font-size: ${0.8+Math.random()*1.2}rem;
+        `;
+        document.body.appendChild(coin);
+        coin.addEventListener('animationend', () => coin.remove());
+      }
+    });
+  });
+</script>
+</body>
+</html>

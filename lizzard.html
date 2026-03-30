@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIZZARD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap');
+
+  :root {
+    --sky: #87CEEB;
+    --sky-top: #4a9eca;
+    --ground: #8B5E3C;
+    --grass: #5a9e3c;
+    --grass-dark: #3d7a28;
+    --sun: #FFD700;
+    --lizard-body: #6aad3e;
+    --lizard-dark: #4a8a26;
+    --tongue: #e8335a;
+    --fly-body: #2a2a2a;
+    --text-shadow: 2px 3px 0px rgba(0,0,0,0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a0a00;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Nunito', sans-serif;
+    overflow: hidden;
+  }
+
+  #game-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #title {
+    font-family: 'Fredoka One', cursive;
+    font-size: 3rem;
+    color: #a8e063;
+    text-shadow: 3px 4px 0 #2a5a10, 0 0 30px rgba(100,200,60,0.4);
+    letter-spacing: 6px;
+  }
+
+  #canvas-container {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(80,200,40,0.2), 0 8px 40px rgba(0,0,0,0.7);
+    border: 3px solid #3a6a20;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  #hud {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+  }
+
+  .hud-item {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.3rem;
+    color: #c8f088;
+    text-shadow: 1px 2px 0 #2a5a10;
+  }
+
+  .hud-item span {
+    color: #fff;
+    font-size: 1.6rem;
+  }
+
+  #instruction {
+    font-size: 0.9rem;
+    color: #7aaa50;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(2px);
+    z-index: 10;
+    gap: 18px;
+  }
+
+  #overlay h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.4rem;
+    color: #a8e063;
+    text-shadow: 2px 3px 0 #2a5a10;
+  }
+
+  #overlay p {
+    color: #ddf5b0;
+    font-size: 1rem;
+    text-align: center;
+    line-height: 1.7;
+    max-width: 280px;
+  }
+
+  #overlay button {
+    margin-top: 8px;
+    background: #5aad30;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 36px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.3rem;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #2a6010, 0 6px 20px rgba(0,0,0,0.4);
+    transition: transform 0.1s, box-shadow 0.1s;
+    letter-spacing: 2px;
+  }
+
+  #overlay button:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #2a6010, 0 8px 20px rgba(0,0,0,0.4); }
+  #overlay button:active { transform: translateY(2px); box-shadow: 0 2px 0 #2a6010; }
+
+  #miss-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(220, 60, 60, 0.35);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 5;
+    transition: opacity 0.05s;
+    border-radius: 13px;
+  }
+
+  #catch-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(80, 220, 60, 0.35);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 5;
+    transition: opacity 0.05s;
+    border-radius: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <div id="title">🦎 LIZZARD</div>
+
+  <div id="hud">
+    <div class="hud-item">SCORE <span id="score-val">0</span></div>
+    <div class="hud-item">BEST <span id="best-val">0</span></div>
+    <div class="hud-item">LIVES <span id="lives-val">❤️❤️❤️</span></div>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="gameCanvas" width="600" height="340"></canvas>
+    <div id="miss-flash"></div>
+    <div id="catch-flash"></div>
+    <div id="overlay">
+      <h2>🦎 LIZZARD</h2>
+      <p>A fly buzzes past. Time your tongue perfectly to catch it!<br><br>
+         <strong>SPACE</strong> or <strong>TAP</strong> to fire tongue</p>
+      <button id="start-btn">PLAY!</button>
+    </div>
+  </div>
+
+  <div id="instruction">SPACE / TAP to flick tongue</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const GROUND_Y = H - 70;
+const GRASS_H = 22;
+const SKY_H = GROUND_Y;
+
+// Game state
+let state = 'idle'; // idle, playing, gameover
+let score = 0, best = 0, lives = 3;
+let frameId;
+
+// Fly
+let fly = { x: -40, y: 0, speed: 0, size: 11, active: false, wingPhase: 0 };
+let flyTimeout = null;
+
+// Tongue
+let tongue = {
+  active: false,
+  phase: 'idle', // idle, extending, retracting
+  progress: 0, // 0..1
+  speed: 0.055,
+  retractSpeed: 0.07,
+  caught: false
+};
+
+// Effects
+let particles = [];
+let catchText = null;
+let shakeFrames = 0;
+
+// Sun animation
+let sunAngle = 0;
+
+// Clouds
+let clouds = [
+  { x: 80, y: 38, w: 80 },
+  { x: 310, y: 55, w: 60 },
+  { x: 480, y: 30, w: 95 },
+];
+
+// Lizard — centered horizontally, mouth faces upward
+const LIZ = {
+  x: W / 2,          // center X (body center)
+  bodyY: GROUND_Y - 18,
+  blinkTimer: 0,
+  blinkDuration: 0,
+  blinkInterval: 180,
+};
+
+function resetFly() {
+  // Randomize y in a band
+  const minY = 55;
+  const maxY = GROUND_Y - 60;
+  fly.y = minY + Math.random() * (maxY - minY);
+  fly.speed = 1.4 + score * 0.08 + Math.random() * 0.8;
+  fly.speed = Math.min(fly.speed, 4.2);
+  fly.x = -40;
+  fly.active = true;
+  fly.wingPhase = 0;
+}
+
+function spawnFlyDelayed() {
+  clearTimeout(flyTimeout);
+  const delay = 900 + Math.random() * 1200;
+  flyTimeout = setTimeout(() => {
+    if (state === 'playing') resetFly();
+  }, delay);
+}
+
+// Audio
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playSchleck() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const dur = 0.18;
+
+    // Noise burst for the wet "schleck" quality
+    const bufSize = ctx.sampleRate * dur;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+
+    // Bandpass filter to shape the noise into a tongue-flick character
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1200, now);
+    bp.frequency.exponentialRampToValueAtTime(400, now + dur);
+    bp.Q.value = 1.8;
+
+    // Amplitude envelope: fast attack, quick decay
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.55, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    // Short pitch-sweep oscillator for the "flick" click
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(900, now);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 0.09);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.3, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+    noise.connect(bp);
+    bp.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+
+    noise.start(now);
+    noise.stop(now + dur);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  } catch (e) { /* audio not available */ }
+}
+
+function fireTongue() {
+  if (tongue.phase !== 'idle') return;
+  tongue.active = true;
+  tongue.phase = 'extending';
+  tongue.progress = 0;
+  tongue.caught = false;
+  playSchleck();
+}
+
+// Tongue tip position — shoots straight up from lizard's open mouth
+function getTongueTip() {
+  const mouthX = LIZ.x;           // center of lizard
+  const mouthY = LIZ.bodyY - 22;  // top of head / open mouth
+  const maxLen = 200;
+  const len = tongue.progress * maxLen;
+  const angle = -Math.PI / 2;     // straight up
+  return {
+    x: mouthX,
+    y: mouthY - len,
+    mouthX, mouthY, len, angle
+  };
+}
+
+function checkCatch() {
+  if (!fly.active || tongue.caught) return false;
+  const tip = getTongueTip();
+  const dx = tip.x - fly.x;
+  const dy = tip.y - fly.y;
+  // Wider horizontal window (fly moves fast), tight vertical
+  return Math.abs(dx) < fly.size + 22 && Math.abs(dy) < fly.size + 14;
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      decay: 0.03 + Math.random() * 0.04,
+      r: 2 + Math.random() * 4,
+      color
+    });
+  }
+}
+
+function flashEl(id, duration) {
+  const el = document.getElementById(id);
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, duration);
+}
+
+function updateHUD() {
+  document.getElementById('score-val').textContent = score;
+  document.getElementById('best-val').textContent = best;
+  const hearts = ['','❤️','❤️❤️','❤️❤️❤️'];
+  document.getElementById('lives-val').textContent = hearts[Math.max(0,lives)] || '';
+}
+
+function showOverlay(title, msg, btnLabel) {
+  const ov = document.getElementById('overlay');
+  ov.querySelector('h2').textContent = title;
+  ov.querySelector('p').innerHTML = msg;
+  ov.querySelector('button').textContent = btnLabel;
+  ov.style.display = 'flex';
+}
+
+function hideOverlay() {
+  document.getElementById('overlay').style.display = 'none';
+}
+
+// Drawing helpers
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, SKY_H);
+  grad.addColorStop(0, '#3a8ec5');
+  grad.addColorStop(1, '#b8e0f7');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, SKY_H);
+}
+
+function drawSun() {
+  const sx = W - 70, sy = 52;
+  // Glow
+  const grd = ctx.createRadialGradient(sx, sy, 8, sx, sy, 38);
+  grd.addColorStop(0, 'rgba(255,230,80,0.5)');
+  grd.addColorStop(1, 'rgba(255,200,0,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(sx, sy, 38, 0, Math.PI*2); ctx.fill();
+  // Rays
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(sunAngle);
+  ctx.strokeStyle = 'rgba(255,220,50,0.5)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    ctx.rotate(Math.PI/4);
+    ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(30, 0); ctx.stroke();
+  }
+  ctx.restore();
+  // Body
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.arc(sx, sy, 15, 0, Math.PI*2); ctx.fill();
+}
+
+function drawCloud(cx, cy, cw) {
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  const h = cw * 0.35;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, cw/2, h/2, 0, 0, Math.PI*2);
+  ctx.ellipse(cx - cw*0.25, cy + h*0.15, cw*0.28, h*0.42, 0, 0, Math.PI*2);
+  ctx.ellipse(cx + cw*0.25, cy + h*0.1, cw*0.3, h*0.45, 0, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawGround() {
+  // Dirt
+  const grad = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+  grad.addColorStop(0, '#a0724a');
+  grad.addColorStop(1, '#6b4a2e');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+
+  // Grass strip
+  ctx.fillStyle = '#5aad30';
+  ctx.beginPath();
+  ctx.rect(0, GROUND_Y, W, GRASS_H);
+  ctx.fill();
+
+  // Grass highlights
+  ctx.fillStyle = '#78cc48';
+  for (let x = 0; x < W; x += 18) {
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND_Y);
+    ctx.lineTo(x + 5, GROUND_Y - 7);
+    ctx.lineTo(x + 10, GROUND_Y);
+    ctx.fill();
+  }
+
+  // Dirt texture lines
+  ctx.strokeStyle = 'rgba(90,55,28,0.4)';
+  ctx.lineWidth = 1;
+  for (let y = GROUND_Y + GRASS_H + 10; y < H; y += 14) {
+    ctx.beginPath();
+    for (let x = 0; x < W; x += 30) {
+      ctx.moveTo(x + Math.random()*10, y);
+      ctx.lineTo(x + 20 + Math.random()*10, y + 2);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawLizard() {
+  const bx = LIZ.x, by = LIZ.bodyY;
+  ctx.save();
+
+  // --- Tail (extends left along the ground) ---
+  ctx.strokeStyle = '#4a8a26';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(bx - 14, by + 12);
+  ctx.quadraticCurveTo(bx - 44, by + 20, bx - 68, by + 14);
+  ctx.stroke();
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(bx - 68, by + 14);
+  ctx.quadraticCurveTo(bx - 88, by + 10, bx - 96, by + 5);
+  ctx.stroke();
+
+  // --- Legs spread to sides ---
+  ctx.strokeStyle = '#5a9a30';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  // Front-left leg
+  ctx.beginPath();
+  ctx.moveTo(bx - 16, by - 4);
+  ctx.lineTo(bx - 34, by + 16);
+  ctx.lineTo(bx - 44, by + 14);
+  ctx.stroke();
+  // Front-right leg
+  ctx.beginPath();
+  ctx.moveTo(bx + 16, by - 4);
+  ctx.lineTo(bx + 34, by + 16);
+  ctx.lineTo(bx + 44, by + 14);
+  ctx.stroke();
+  // Back-left leg
+  ctx.beginPath();
+  ctx.moveTo(bx - 12, by + 12);
+  ctx.lineTo(bx - 28, by + 28);
+  ctx.lineTo(bx - 38, by + 26);
+  ctx.stroke();
+  // Back-right leg
+  ctx.beginPath();
+  ctx.moveTo(bx + 12, by + 12);
+  ctx.lineTo(bx + 28, by + 28);
+  ctx.lineTo(bx + 38, by + 26);
+  ctx.stroke();
+
+  // --- Body (oval, slightly taller than wide) ---
+  ctx.fillStyle = '#6aad3e';
+  ctx.beginPath();
+  ctx.ellipse(bx, by, 20, 28, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Body pattern spots
+  ctx.fillStyle = '#4a8a26';
+  ctx.beginPath(); ctx.ellipse(bx, by - 10, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(bx - 6, by + 2, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(bx + 6, by + 2, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(bx, by + 12, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+
+  // --- Neck ---
+  ctx.fillStyle = '#6aad3e';
+  ctx.beginPath();
+  ctx.ellipse(bx, by - 28, 13, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // --- Head (upward-facing, mouth open) ---
+  // Skull
+  ctx.fillStyle = '#6aad3e';
+  ctx.beginPath();
+  ctx.ellipse(bx, by - 44, 16, 13, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Lower jaw (open downward from head — so mouth gap faces UP)
+  // Upper jaw top of head
+  ctx.fillStyle = '#5aad30';
+  ctx.beginPath();
+  ctx.ellipse(bx, by - 52, 13, 7, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mouth gap — open upward: upper jaw above, lower jaw below, gap between
+  // Lower jaw
+  ctx.fillStyle = '#5aad30';
+  ctx.beginPath();
+  ctx.ellipse(bx, by - 36, 14, 7, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mouth interior (the open gap between upper and lower jaw)
+  ctx.fillStyle = '#c0392b';
+  ctx.beginPath();
+  ctx.ellipse(bx, by - 44, 11, 8, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Teeth nubs on upper jaw
+  ctx.fillStyle = '#f0f0e0';
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.ellipse(bx + i * 4, by - 49, 1.8, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Eyes (on sides of head, looking outward)
+  const blinking = LIZ.blinkTimer > LIZ.blinkInterval - LIZ.blinkDuration;
+  // Left eye
+  ctx.fillStyle = '#1a1a1a';
+  if (blinking) {
+    ctx.fillRect(bx - 16, by - 47, 8, 2);
+    ctx.fillRect(bx + 8, by - 47, 8, 2);
+  } else {
+    ctx.beginPath(); ctx.arc(bx - 13, by - 46, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(bx - 11, by - 48, 1.8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(bx + 13, by - 46, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(bx + 15, by - 48, 1.8, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Nostrils on top of snout
+  ctx.fillStyle = '#3a7020';
+  ctx.beginPath(); ctx.arc(bx - 5, by - 56, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(bx + 5, by - 56, 2, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawTongue() {
+  if (!tongue.active && tongue.phase === 'idle') return;
+  const t = getTongueTip();
+  const tipX = t.x, tipY = t.y;
+  const mX = t.mouthX, mY = t.mouthY;
+
+  ctx.save();
+  ctx.strokeStyle = '#e8335a';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(232,51,90,0.5)';
+  ctx.shadowBlur = 7;
+
+  // Slight left-right wobble as it extends (purely cosmetic)
+  const wobble = Math.sin(tongue.progress * Math.PI) * 6;
+  const midX = mX + wobble;
+  const midY = (mY + tipY) / 2;
+
+  ctx.beginPath();
+  ctx.moveTo(mX, mY);
+  ctx.quadraticCurveTo(midX, midY, tipX, tipY);
+  ctx.stroke();
+
+  // Forked tip — splits left and right at the top
+  if (t.len > 10) {
+    const forkLen = 9;
+    ctx.lineWidth = 2;
+    // Left fork
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - forkLen * 0.7, tipY - forkLen * 0.7);
+    ctx.stroke();
+    // Right fork
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX + forkLen * 0.7, tipY - forkLen * 0.7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawFly(x, y, wingPhase) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Wings
+  const wFlap = Math.sin(wingPhase) * 0.3;
+  ctx.fillStyle = 'rgba(160,200,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(-6, -4 + wFlap * 6, 9, 5, -0.4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(6, -4 + wFlap * 6, 9, 5, 0.4, 0, Math.PI*2);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = '#2a2a2a';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 5, 7, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(0, -8, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#aa2200';
+  ctx.beginPath(); ctx.arc(-2, -9, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(2, -9, 1.5, 0, Math.PI*2); ctx.fill();
+
+  // Legs
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1;
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * 2, 2);
+    ctx.lineTo(i * 2 - 6, 8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(i * 2, 0);
+    ctx.lineTo(i * 2 + 6, 6);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawCatchText() {
+  if (!catchText) return;
+  ctx.save();
+  ctx.globalAlpha = catchText.life;
+  ctx.font = `bold ${catchText.size}px 'Fredoka One', cursive`;
+  ctx.fillStyle = catchText.color;
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(catchText.text, catchText.x, catchText.y);
+  ctx.restore();
+}
+
+// Main loop
+function update() {
+  // Sun
+  sunAngle += 0.004;
+
+  // Clouds drift
+  clouds.forEach(c => {
+    c.x -= 0.18;
+    if (c.x + c.w < 0) c.x = W + c.w;
+  });
+
+  // Lizard blink
+  LIZ.blinkTimer++;
+  if (LIZ.blinkTimer >= LIZ.blinkInterval) {
+    LIZ.blinkDuration = 8;
+    LIZ.blinkTimer = 0;
+    LIZ.blinkInterval = 120 + Math.random() * 160;
+  }
+
+  if (state !== 'playing') return;
+
+  // Fly movement
+  if (fly.active) {
+    fly.x += fly.speed;
+    fly.wingPhase += 0.35;
+    if (fly.x > W + 60) {
+      // Fly escaped
+      fly.active = false;
+      lives--;
+      updateHUD();
+      flashEl('miss-flash', 400);
+      shakeFrames = 12;
+      if (lives <= 0) {
+        setTimeout(gameOver, 300);
+      } else {
+        spawnFlyDelayed();
+      }
+    }
+  }
+
+  // Tongue
+  if (tongue.phase === 'extending') {
+    tongue.progress += tongue.speed;
+    if (checkCatch()) {
+      // Caught!
+      tongue.caught = true;
+      fly.active = false;
+      score++;
+      if (score > best) best = score;
+      updateHUD();
+      flashEl('catch-flash', 350);
+      spawnParticles(fly.x, fly.y, '#FFD700', 14);
+      spawnParticles(fly.x, fly.y, '#e8335a', 8);
+      const msgs = ['YUMMY! 😋', 'GOT IT! 🎯', 'SNATCH! 💥', 'DELICIOUS! 🤤', 'PERFECT! ⭐'];
+      catchText = {
+        text: msgs[Math.floor(Math.random() * msgs.length)],
+        x: fly.x, y: fly.y - 20,
+        life: 1, color: '#FFD700', size: 22
+      };
+      tongue.phase = 'retracting';
+      spawnFlyDelayed();
+    } else if (tongue.progress >= 1) {
+      tongue.phase = 'retracting';
+    }
+  } else if (tongue.phase === 'retracting') {
+    tongue.progress -= tongue.retractSpeed;
+    if (tongue.progress <= 0) {
+      tongue.progress = 0;
+      tongue.phase = 'idle';
+      tongue.active = false;
+    }
+  }
+
+  // Particles
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.08;
+    p.life -= p.decay;
+  });
+
+  // Catch text
+  if (catchText) {
+    catchText.y -= 0.7;
+    catchText.life -= 0.018;
+    if (catchText.life <= 0) catchText = null;
+  }
+
+  // Shake
+  if (shakeFrames > 0) shakeFrames--;
+}
+
+function draw() {
+  ctx.save();
+  if (shakeFrames > 0) {
+    const sx = (Math.random() - 0.5) * 6;
+    const sy = (Math.random() - 0.5) * 4;
+    ctx.translate(sx, sy);
+  }
+
+  drawSky();
+  drawSun();
+  clouds.forEach(c => drawCloud(c.x, c.y, c.w));
+  drawGround();
+  drawTongue();
+  drawLizard();
+  if (fly.active) drawFly(fly.x, fly.y, fly.wingPhase);
+  drawParticles();
+  drawCatchText();
+
+  ctx.restore();
+}
+
+function loop() {
+  update();
+  draw();
+  frameId = requestAnimationFrame(loop);
+}
+
+function startGame() {
+  score = 0;
+  lives = 3;
+  fly.active = false;
+  tongue.phase = 'idle';
+  tongue.progress = 0;
+  tongue.active = false;
+  particles = [];
+  catchText = null;
+  shakeFrames = 0;
+  hideOverlay();
+  updateHUD();
+  state = 'playing';
+  spawnFlyDelayed();
+}
+
+function gameOver() {
+  state = 'gameover';
+  fly.active = false;
+  clearTimeout(flyTimeout);
+  showOverlay(
+    '💀 GAME OVER',
+    `You caught <strong>${score}</strong> flies!<br>Best: <strong>${best}</strong><br><br>The flies won this round...`,
+    'TRY AGAIN'
+  );
+}
+
+// Input
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (state === 'playing') fireTongue();
+    else if (state === 'idle' || state === 'gameover') startGame();
+  }
+});
+
+canvas.addEventListener('click', () => {
+  if (state === 'playing') fireTongue();
+});
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+// Init
+updateHUD();
+loop();
+</script>
+</body>
+</html>

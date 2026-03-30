@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ole's Abenteuer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: monospace; color: #eee; }
+h1 { font-size: 22px; margin-bottom: 8px; color: #FFD700; letter-spacing: 2px; }
+#gameContainer { position: relative; width: 700px; }
+#canvas { width: 700px; height: 400px; border-radius: 12px; border: 1px solid #444; display: block; background: #87CEEB; }
+#hud { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 14px; color: #ccc; }
+#controls { display: flex; gap: 10px; padding: 10px 0 4px; justify-content: space-between; }
+#controls-left { display: flex; gap: 10px; }
+#controls-right { display: flex; }
+.ctrl-btn {
+  background: #2a2a4a; border: 1px solid #555; border-radius: 10px;
+  color: #eee; font-size: 20px; width: 58px; height: 58px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: background 0.1s;
+}
+.ctrl-btn:active { background: #3a3a6a; }
+#info { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🧒 Ole's Abenteuer</h1>
+<div id="gameContainer">
+  <div id="hud">
+    <span>⭐ <span id="score">0</span></span>
+    <span id="levelLabel">Level 1</span>
+    <span>❤️ <span id="lives">3</span></span>
+  </div>
+  <canvas id="canvas" width="700" height="400"></canvas>
+  <div id="controls">
+    <div id="controls-left">
+      <button class="ctrl-btn" id="btnLeft">◀</button>
+      <button class="ctrl-btn" id="btnRight">▶</button>
+    </div>
+    <div id="controls-right">
+      <button class="ctrl-btn" id="btnJump">▲</button>
+    </div>
+  </div>
+</div>
+<div id="info">Pfeiltasten / WASD / Leertaste &nbsp;|&nbsp; Gegner durch Draufspringen besiegen &nbsp;|&nbsp; Rote Fahne = Ziel</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = 700, H = 400;
+canvas.width = W; canvas.height = H;
+
+let score = 0, lives = 3, level = 1, gameState = 'start', cameraX = 0;
+let keys = {};
+
+function makeLevel(n) {
+  const platforms = [
+    {x:0,   y:340, w:200, h:20},
+    {x:240, y:300, w:120, h:20},
+    {x:420, y:260, w:100, h:20},
+    {x:580, y:300, w:140, h:20},
+    {x:780, y:260, w:130, h:20},
+    {x:980, y:220, w:110, h:20},
+    {x:1150,y:270, w:120, h:20},
+    {x:1330,y:230, w:150, h:20},
+    {x:1540,y:280, w:100, h:20},
+    {x:1690,y:340, w:300, h:20},
+    {x:1200,y:170, w:80,  h:20},
+    {x:700, y:200, w:80,  h:20},
+    {x:480, y:160, w:70,  h:20},
+  ];
+  const coins = [
+    {x:280,y:270},{x:320,y:270},{x:460,y:230},{x:500,y:230},
+    {x:620,y:270},{x:660,y:270},{x:820,y:230},{x:860,y:230},
+    {x:1010,y:190},{x:1050,y:190},{x:1180,y:240},{x:1220,y:240},
+    {x:1370,y:200},{x:1410,y:200},{x:1450,y:200},{x:1580,y:250},
+    {x:720,y:170},{x:750,y:160},{x:1230,y:140},{x:1210,y:140},
+    {x:90,y:300},{x:50,y:300},
+  ];
+  const enemies = [
+    {x:700, y:318, dir:1,  speed:1+n*0.3},
+    {x:1200,y:238, dir:-1, speed:1.2+n*0.3},
+    {x:1730,y:318, dir:1,  speed:1.5+n*0.3},
+    {x:600, y:278, dir:-1, speed:0.8+n*0.2},
+  ];
+  const goal = {x:1850, y:300, w:30, h:40};
+  return {platforms, coins: coins.map(c=>({...c,collected:false})), enemies, goal, worldW:2000};
+}
+
+let player = {};
+function initPlayer() {
+  player = {x:30, y:260, w:20, h:30, vx:0, vy:0, onGround:false, facing:1, invincible:0, dead:false};
+}
+
+let curLevel;
+function startLevel() {
+  curLevel = makeLevel(level);
+  initPlayer();
+  cameraX = 0;
+  gameState = 'playing';
+}
+
+function resetGame() {
+  score = 0; lives = 3; level = 1;
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
+  document.getElementById('levelLabel').textContent = 'Level '+level;
+  startLevel();
+}
+
+const GRAVITY = 0.5, JUMP = -11, SPEED = 3.5;
+
+function getInput() {
+  return {
+    left:  keys['ArrowLeft'] ||keys['a']||keys['A']||touchLeft,
+    right: keys['ArrowRight']||keys['d']||keys['D']||touchRight,
+    jump:  keys['ArrowUp']   ||keys[' ']||keys['w']||keys['W']||touchJump
+  };
+}
+
+let touchLeft=false, touchRight=false, touchJump=false;
+
+function updatePlayer(inp) {
+  if (player.dead) { player.vy += GRAVITY; player.y += player.vy; return; }
+  if (inp.left)       { player.vx = -SPEED; player.facing = -1; }
+  else if (inp.right) { player.vx =  SPEED; player.facing =  1; }
+  else player.vx *= 0.8;
+
+  if (inp.jump && player.onGround) { player.vy = JUMP; player.onGround = false; }
+  player.vy += GRAVITY;
+  if (player.vy > 14) player.vy = 14;
+
+  player.x += player.vx;
+  player.y += player.vy;
+  if (player.x < 0) player.x = 0;
+  if (player.x > curLevel.worldW - player.w) player.x = curLevel.worldW - player.w;
+
+  player.onGround = false;
+  for (let p of curLevel.platforms) {
+    if (player.x+player.w > p.x && player.x < p.x+p.w &&
+        player.y+player.h > p.y && player.y+player.h < p.y+p.h+16 && player.vy >= 0) {
+      player.y = p.y - player.h;
+      player.vy = 0;
+      player.onGround = true;
+    }
+  }
+  if (player.invincible > 0) player.invincible--;
+  if (player.y > H + 80) loseLife();
+}
+
+function loseLife() {
+  lives--;
+  document.getElementById('lives').textContent = lives;
+  if (lives <= 0) { gameState='gameover'; return; }
+  initPlayer(); cameraX = 0;
+}
+
+function updateEnemies() {
+  for (let e of curLevel.enemies) {
+    e.x += e.dir * e.speed;
+    for (let p of curLevel.platforms) {
+      if (e.x+16 > p.x && e.x < p.x+p.w && Math.abs(e.y+20 - p.y) < 4) {
+        if (e.x <= p.x || e.x+16 >= p.x+p.w) e.dir *= -1;
+        break;
+      }
+    }
+    if (!player.dead && player.invincible === 0 &&
+        player.x+player.w > e.x && player.x < e.x+16 &&
+        player.y+player.h > e.y && player.y < e.y+20) {
+      if (player.vy > 0 && player.y+player.h < e.y+10) {
+        e.dead = true;
+        score += 50;
+        document.getElementById('score').textContent = score;
+        player.vy = -7;
+      } else {
+        player.invincible = 90;
+        lives--;
+        document.getElementById('lives').textContent = lives;
+        if (lives <= 0) gameState='gameover';
+      }
+    }
+  }
+  curLevel.enemies = curLevel.enemies.filter(e=>!e.dead);
+}
+
+function updateCoins() {
+  for (let c of curLevel.coins) {
+    if (!c.collected &&
+        player.x+player.w > c.x && player.x < c.x+14 &&
+        player.y+player.h > c.y && player.y < c.y+14) {
+      c.collected = true;
+      score += 10;
+      document.getElementById('score').textContent = score;
+    }
+  }
+}
+
+function checkGoal() {
+  const g = curLevel.goal;
+  if (player.x+player.w > g.x && player.x < g.x+g.w &&
+      player.y+player.h > g.y && player.y < g.y+g.h) {
+    level++;
+    document.getElementById('levelLabel').textContent='Level '+level;
+    if (level > 3) { gameState='win'; return; }
+    startLevel();
+  }
+}
+
+let t = 0;
+
+function drawBG() {
+  ctx.fillStyle='#87CEEB'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(255,255,255,0.85)';
+  [[100,60],[300,40],[520,70],[620,50]].forEach(([cx,cy])=>{
+    drawCloud(((cx - cameraX*0.15)%W+W)%W, cy);
+  });
+  ctx.fillStyle='#5a9e3a';
+  ctx.fillRect(0, H-30, W, 30);
+}
+
+function drawCloud(x,y) {
+  ctx.beginPath();
+  ctx.arc(x,y,22,0,Math.PI*2);
+  ctx.arc(x+20,y-10,18,0,Math.PI*2);
+  ctx.arc(x+40,y,22,0,Math.PI*2);
+  ctx.fill();
+}
+
+function worldToScreen(wx) { return wx - cameraX; }
+
+function drawPlatforms() {
+  for (let p of curLevel.platforms) {
+    let sx = worldToScreen(p.x);
+    if (sx > W || sx+p.w < 0) continue;
+    ctx.fillStyle='#4a8c28';
+    ctx.fillRect(sx, p.y, p.w, 6);
+    ctx.fillStyle='#8B5E3C';
+    ctx.fillRect(sx, p.y+6, p.w, p.h-6);
+    ctx.fillStyle='#6b4423';
+    for(let i=0;i<p.w;i+=8) ctx.fillRect(sx+i, p.y+8, 4, 2);
+  }
+}
+
+function drawCoins() {
+  for (let c of curLevel.coins) {
+    if (c.collected) continue;
+    let sx = worldToScreen(c.x);
+    if (sx<-20||sx>W+20) continue;
+    let bob = Math.sin(t*0.08+c.x*0.1)*2;
+    ctx.save();
+    ctx.translate(sx+7, c.y+7+bob);
+    ctx.fillStyle='#FFD700';
+    ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#FFA500';
+    ctx.font='bold 8px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('$',0,0);
+    ctx.restore();
+  }
+}
+
+function drawEnemies() {
+  for (let e of curLevel.enemies) {
+    let sx = worldToScreen(e.x);
+    if (sx<-30||sx>W+30) continue;
+    ctx.save();
+    ctx.translate(sx+8, e.y);
+    ctx.fillStyle='#c0392b';
+    ctx.beginPath(); ctx.arc(0,10,10,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#e74c3c';
+    ctx.fillRect(-10,10,20,10);
+    ctx.fillStyle='white';
+    ctx.fillRect(-5,12,4,4); ctx.fillRect(1,12,4,4);
+    ctx.fillStyle='#111';
+    ctx.fillRect(-4+(e.dir>0?1:0),13,2,2);
+    ctx.fillRect(2+(e.dir>0?1:0),13,2,2);
+    ctx.restore();
+  }
+}
+
+function drawGoal() {
+  const g = curLevel.goal;
+  let sx = worldToScreen(g.x);
+  ctx.fillStyle='#888';
+  ctx.fillRect(sx+14, g.y-60, 3, 100);
+  ctx.fillStyle='#e74c3c';
+  let wave = Math.sin(t*0.1)*4;
+  ctx.beginPath();
+  ctx.moveTo(sx+17, g.y-60);
+  ctx.lineTo(sx+40+wave, g.y-48);
+  ctx.lineTo(sx+17, g.y-38);
+  ctx.fill();
+  ctx.fillStyle='#FFD700';
+  ctx.font='bold 11px sans-serif';
+  ctx.fillText('ZIEL', sx+2, g.y-65);
+}
+
+function drawOle() {
+  if (player.dead) { drawOleSprite(worldToScreen(player.x), player.y, 1, false, true); return; }
+  if (player.invincible > 0 && Math.floor(player.invincible/6)%2===0) return;
+  let walking = Math.abs(player.vx) > 0.5;
+  let frame = walking ? Math.floor(t/8)%2 : 0;
+  drawOleSprite(worldToScreen(player.x), player.y, player.facing, frame===1, false);
+}
+
+function drawOleSprite(sx, sy, dir, altFrame, dead) {
+  ctx.save();
+  ctx.translate(sx + player.w/2, sy);
+  if (dir < 0) ctx.scale(-1,1);
+  if (dead) { ctx.rotate(Math.PI); ctx.translate(-player.w/2, -player.h); }
+
+  ctx.fillStyle='#333';
+  ctx.fillRect(-9,26,9,5); ctx.fillRect(2,26,9,5);
+  if (altFrame) { ctx.fillRect(-9,24,9,5); ctx.fillRect(2,28,9,5); }
+
+  ctx.fillStyle='#3b5bdb';
+  ctx.fillRect(-8,18,7,10); ctx.fillRect(2,18,7,10);
+
+  ctx.fillStyle='#2ecc71';
+  ctx.fillRect(-9,8,18,12);
+
+  ctx.fillStyle='#FDBCB4';
+  if (!altFrame) {
+    ctx.fillRect(-14,8,5,10); ctx.fillRect(9,8,5,10);
+  } else {
+    ctx.fillRect(-14,10,5,10); ctx.fillRect(9,6,5,10);
+  }
+
+  ctx.fillStyle='#FDBCB4';
+  ctx.beginPath(); ctx.arc(0,2,9,0,Math.PI*2); ctx.fill();
+
+  ctx.fillStyle='#FFD700';
+  ctx.fillRect(-9,-6,18,8);
+  ctx.fillRect(-10,-4,4,16);
+  ctx.fillRect(7,-4,4,14);
+  ctx.fillRect(-11,0,3,12);
+
+  ctx.fillStyle='#1a1a2e';
+  ctx.fillRect(-4,0,3,3); ctx.fillRect(2,0,3,3);
+  ctx.fillStyle='white';
+  ctx.fillRect(-3,0,1,1); ctx.fillRect(3,0,1,1);
+
+  ctx.strokeStyle='#8B4513'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(0,4,3,0.1,Math.PI-0.1); ctx.stroke();
+
+  if (Math.abs(player.vx)<0.5 && !dead) {
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.font='bold 9px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('Ole', 0, -14);
+  }
+  ctx.restore();
+}
+
+function drawScreen(txt, sub='', sub2='') {
+  ctx.fillStyle='rgba(0,0,0,0.6)';
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#FFD700';
+  ctx.font='bold 38px monospace';
+  ctx.textAlign='center';
+  ctx.fillText(txt, W/2, H/2-20);
+  ctx.fillStyle='#fff';
+  ctx.font='18px monospace';
+  ctx.fillText(sub, W/2, H/2+20);
+  if(sub2){ ctx.font='14px monospace'; ctx.fillStyle='#aaa'; ctx.fillText(sub2,W/2,H/2+50); }
+}
+
+let jumpPrev=false;
+function loop() {
+  t++;
+  const inp = getInput();
+  ctx.clearRect(0,0,W,H);
+
+  if (gameState==='start') {
+    drawBG();
+    drawScreen("Ole's Abenteuer", 'Leertaste / ▲ zum Starten', 'Pfeiltasten oder Buttons steuern');
+    if ((inp.jump && !jumpPrev)||inp.left||inp.right) resetGame();
+    jumpPrev=inp.jump;
+    requestAnimationFrame(loop); return;
+  }
+  if (gameState==='gameover') {
+    drawBG();
+    drawScreen('Game Over', 'Punkte: '+score, 'Leertaste / ▲ für Neustart');
+    if (inp.jump && !jumpPrev) resetGame();
+    jumpPrev=inp.jump;
+    requestAnimationFrame(loop); return;
+  }
+  if (gameState==='win') {
+    drawBG();
+    drawScreen('Gewonnen! 🏆', 'Punkte: '+score+'  Ole ist der Beste!', 'Leertaste / ▲ für neues Spiel');
+    if (inp.jump && !jumpPrev) resetGame();
+    jumpPrev=inp.jump;
+    requestAnimationFrame(loop); return;
+  }
+
+  updatePlayer(inp);
+  updateEnemies();
+  updateCoins();
+  checkGoal();
+  jumpPrev=inp.jump;
+
+  let targetCam = player.x - W/3;
+  if (targetCam < 0) targetCam = 0;
+  if (targetCam > curLevel.worldW - W) targetCam = curLevel.worldW - W;
+  cameraX += (targetCam - cameraX) * 0.15;
+
+  drawBG();
+  drawPlatforms();
+  drawGoal();
+  drawCoins();
+  drawEnemies();
+  drawOle();
+
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener('keydown', e=>{ keys[e.key]=true; e.preventDefault(); });
+document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+
+const btnL = document.getElementById('btnLeft');
+const btnR = document.getElementById('btnRight');
+const btnJ = document.getElementById('btnJump');
+
+function addTouch(btn, setter) {
+  btn.addEventListener('touchstart', e=>{ e.preventDefault(); setter(true);  }, {passive:false});
+  btn.addEventListener('touchend',   e=>{ e.preventDefault(); setter(false); }, {passive:false});
+  btn.addEventListener('mousedown',  ()=> setter(true));
+  btn.addEventListener('mouseup',    ()=> setter(false));
+  btn.addEventListener('mouseleave', ()=> setter(false));
+}
+addTouch(btnL, v=>touchLeft=v);
+addTouch(btnR, v=>touchRight=v);
+addTouch(btnJ, v=>touchJump=v);
+
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Das dunkle Labyrinth</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    background:#000;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    overflow:hidden;
+    font-family:'Georgia',serif;
+    user-select:none;
+}
+#wrap { position:relative; }
+canvas { display:block; }
+#hud {
+    position:absolute;
+    top:8px; left:50%;
+    transform:translateX(-50%);
+    color:#e8c87a;
+    text-shadow:0 0 8px #c8870a, 0 0 16px #c8870a;
+    font-size:14px;
+    pointer-events:none;
+    white-space:nowrap;
+    letter-spacing:1px;
+}
+#overlay {
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    background:rgba(0,0,0,0.88);
+    color:#e8c87a;
+    text-align:center;
+    gap:18px;
+    padding:20px;
+}
+#overlay h1 {
+    font-size:2.4em;
+    text-shadow:0 0 18px #c8870a, 0 0 36px #c8870a;
+    letter-spacing:4px;
+}
+#overlay p { font-size:1em; max-width:420px; line-height:1.65; opacity:.88; }
+#overlay .hint { font-size:.85em; opacity:.6; }
+#overlay button {
+    margin-top:4px;
+    padding:11px 32px;
+    font-size:1em;
+    background:transparent;
+    border:1px solid #c8870a;
+    color:#e8c87a;
+    cursor:pointer;
+    font-family:'Georgia',serif;
+    letter-spacing:2px;
+    transition:all .25s;
+    text-shadow:0 0 8px #c8870a;
+}
+#overlay button:hover {
+    background:rgba(200,135,10,.18);
+    box-shadow:0 0 18px #c8870a;
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="hud"></div>
+  <div id="overlay">
+    <h1>Das dunkle Labyrinth</h1>
+    <p>Du bist in einem dunklen Labyrinth gefangen.<br>
+       Nur die Kerze in deiner Hand erhellt den Weg.<br>
+       Finde den Ausgang — bevor die Flamme erlischt.</p>
+    <p class="hint">Steuerung: Pfeiltasten oder WASD &nbsp;|&nbsp; Touch: Wischen</p>
+    <button id="btnStart">Spiel starten</button>
+  </div>
+</div>
+
+<script>
+// ─── Konstanten ───────────────────────────────────────────────────────────────
+const COLS = 21, ROWS = 15, CELL = 38;
+const W = COLS * CELL, H = ROWS * CELL;
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const hud    = document.getElementById('hud');
+const overlay= document.getElementById('overlay');
+canvas.width = W; canvas.height = H;
+
+// Skalierung auf Fenster
+function resize() {
+    const s = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.97;
+    canvas.style.width  = (W*s)+'px';
+    canvas.style.height = (H*s)+'px';
+    document.getElementById('wrap').style.width  = (W*s)+'px';
+    document.getElementById('wrap').style.height = (H*s)+'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Zustand ──────────────────────────────────────────────────────────────────
+// Wand-Bits: N=1 E=2 S=4 W=8  (gesetzt = Wand vorhanden)
+let maze = [];
+let player = { gx:0, gy:0, px:0, py:0, tx:0, ty:0 };
+let moving = false;
+let gameActive = false;
+let steps = 0, t0 = 0;
+const EXIT = { x: COLS-1, y: ROWS-1 };
+
+// Kerzen-Flackern
+let lightR = 130, lightRTarget = 130, lightPhase = 0;
+
+// ─── Labyrinth-Generierung (Recursive Backtracker) ───────────────────────────
+function generateMaze() {
+    maze = Array.from({length:ROWS}, () => new Uint8Array(COLS).fill(15));
+    const vis = Array.from({length:ROWS}, () => new Uint8Array(COLS));
+
+    // [dx, dy, Wand im aktuellen, Wand beim Nachbarn]
+    const DIRS = [[0,-1,1,4],[1,0,2,8],[0,1,4,1],[-1,0,8,2]];
+
+    function carve(cx, cy) {
+        vis[cy][cx] = 1;
+        const d = [...DIRS].sort(() => Math.random()-.5);
+        for (const [dx,dy,w,nw] of d) {
+            const nx=cx+dx, ny=cy+dy;
+            if (nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&!vis[ny][nx]) {
+                maze[cy][cx] &= ~w;
+                maze[ny][nx] &= ~nw;
+                carve(nx, ny);
+            }
+        }
+    }
+    carve(0, 0);
+
+    // Sicherstellen dass Start & Exit offen sind (außer Außenwand die bleibt)
+}
+
+// ─── Spiel initialisieren ─────────────────────────────────────────────────────
+function initGame() {
+    generateMaze();
+    player.gx = player.gy = 0;
+    player.px = player.tx = CELL/2;
+    player.py = player.ty = CELL/2;
+    moving = false;
+    steps  = 0;
+    t0     = Date.now();
+    gameActive = true;
+    drawMazeCache();
+}
+
+// ─── Eingabe ──────────────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+    if (!gameActive) return;
+    const map = {
+        ArrowUp:'N', ArrowDown:'S', ArrowLeft:'W', ArrowRight:'E',
+        w:'N', s:'S', a:'W', d:'E',
+        W:'N', S:'S', A:'W', D:'E'
+    };
+    if (map[e.key]) { e.preventDefault(); tryMove(map[e.key]); }
+});
+
+let tStart = null;
+canvas.addEventListener('touchstart', e=>{
+    tStart = {x:e.touches[0].clientX, y:e.touches[0].clientY};
+    e.preventDefault();
+},{passive:false});
+canvas.addEventListener('touchend', e=>{
+    if (!tStart||!gameActive) return;
+    const dx = e.changedTouches[0].clientX - tStart.x;
+    const dy = e.changedTouches[0].clientY - tStart.y;
+    if (Math.max(Math.abs(dx),Math.abs(dy))<18) return;
+    tryMove(Math.abs(dx)>Math.abs(dy) ? (dx>0?'E':'W') : (dy>0?'S':'N'));
+    e.preventDefault();
+},{passive:false});
+
+function tryMove(dir) {
+    if (moving) return;
+    const cell = maze[player.gy][player.gx];
+    const checks = {N:[1,0,-1],E:[2,1,0],S:[4,0,1],W:[8,-1,0]};
+    const [wall,dx,dy] = checks[dir];
+    if (cell & wall) return; // Wand blockiert
+    const nx = player.gx+dx, ny = player.gy+dy;
+    if (nx<0||nx>=COLS||ny<0||ny>=ROWS) return;
+    player.gx = nx; player.gy = ny;
+    player.tx = nx*CELL+CELL/2;
+    player.ty = ny*CELL+CELL/2;
+    steps++;
+    moving = true;
+    if (nx===EXIT.x && ny===EXIT.y) {
+        setTimeout(winGame, 350);
+    }
+}
+
+// ─── Maze-Cache (statischer Hintergrund) ─────────────────────────────────────
+const mcv = document.createElement('canvas');
+mcv.width = W; mcv.height = H;
+const mc  = mcv.getContext('2d');
+
+function drawMazeCache() {
+    // Boden
+    mc.fillStyle = '#160d04';
+    mc.fillRect(0,0,W,H);
+
+    // Bodenfliesen (subtil)
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+        const v = ((c+r)%2===0) ? '#1a1008' : '#160d04';
+        mc.fillStyle = v;
+        mc.fillRect(c*CELL+1, r*CELL+1, CELL-2, CELL-2);
+    }
+
+    // Ausgang (leichtes Grün-Glimmen)
+    const ex=EXIT.x*CELL, ey=EXIT.y*CELL;
+    const eg = mc.createRadialGradient(ex+CELL/2,ey+CELL/2,2,ex+CELL/2,ey+CELL/2,CELL*0.8);
+    eg.addColorStop(0,'rgba(60,180,60,0.35)');
+    eg.addColorStop(1,'rgba(0,0,0,0)');
+    mc.fillStyle = eg;
+    mc.fillRect(ex-CELL,ey-CELL,CELL*3,CELL*3);
+
+    mc.strokeStyle = '#3ab83a';
+    mc.lineWidth = 2;
+    mc.strokeRect(ex+4, ey+4, CELL-8, CELL-8);
+    mc.fillStyle = '#5ade5a';
+    mc.font = 'bold '+(CELL*.55)+'px serif';
+    mc.textAlign = 'center';
+    mc.textBaseline = 'middle';
+    mc.fillText('✦', ex+CELL/2, ey+CELL/2+1);
+
+    // Wände zeichnen
+    const WW = 4; // Wanddicke
+    mc.fillStyle = '#7a5520';
+
+    for (let r=0;r<ROWS;r++) {
+        for (let c=0;c<COLS;c++) {
+            const x=c*CELL, y=r*CELL, cell=maze[r][c];
+
+            if (cell&1) { // Nord
+                mc.fillRect(x, y, CELL+WW, WW);
+            }
+            if (cell&2) { // Ost
+                mc.fillRect(x+CELL-WW, y, WW, CELL+WW);
+            }
+            if (cell&4) { // Süd
+                mc.fillRect(x, y+CELL-WW, CELL+WW, WW);
+            }
+            if (cell&8) { // West
+                mc.fillRect(x, y, WW, CELL+WW);
+            }
+        }
+    }
+
+    // Wand-Highlight (Steinstruktur andeuten)
+    mc.strokeStyle = 'rgba(180,120,60,0.18)';
+    mc.lineWidth = 1;
+    for (let r=0;r<ROWS;r++) {
+        for (let c=0;c<COLS;c++) {
+            const x=c*CELL, y=r*CELL, cell=maze[r][c];
+            if (cell&1) { mc.beginPath(); mc.moveTo(x,y+1); mc.lineTo(x+CELL,y+1); mc.stroke(); }
+            if (cell&8) { mc.beginPath(); mc.moveTo(x+1,y); mc.lineTo(x+1,y+CELL); mc.stroke(); }
+        }
+    }
+}
+
+// ─── Spielfigur ───────────────────────────────────────────────────────────────
+function drawPlayer(px, py, now) {
+    ctx.save();
+
+    // Schatten
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(px+2, py+6, 9, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Umhang
+    ctx.fillStyle = '#2a1a0a';
+    ctx.beginPath();
+    ctx.arc(px, py+1, 12, 0, Math.PI*2);
+    ctx.fill();
+
+    // Kapuze
+    ctx.fillStyle = '#3d2810';
+    ctx.beginPath();
+    ctx.arc(px, py-2, 8, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#5a3d1a';
+    ctx.beginPath();
+    ctx.arc(px-1, py-4, 5, 0, Math.PI*2);
+    ctx.fill();
+
+    // Augen
+    ctx.fillStyle = '#ffd060';
+    ctx.shadowColor = '#ffd060';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(px-3, py-4, 1.5, 0, Math.PI*2);
+    ctx.arc(px+3, py-4, 1.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Kerzenstab
+    const cx2 = px+11, cy2 = py-2;
+    ctx.fillStyle = '#d8c880';
+    ctx.fillRect(cx2-2, cy2, 4, 11);
+    ctx.fillStyle = '#c0b060';
+    ctx.fillRect(cx2-2, cy2+9, 4, 2);
+
+    // Flammen-Flackern
+    const ft = now/1000;
+    const fx = cx2 + Math.sin(ft*7.3)*1.2 + Math.sin(ft*3.1)*0.8;
+    const fy = cy2 - 7 + Math.sin(ft*5.7)*0.8;
+
+    // Flammenschein auf Stab
+    const waxGlow = ctx.createRadialGradient(cx2,cy2,0,cx2,cy2,10);
+    waxGlow.addColorStop(0,'rgba(255,200,80,0.22)');
+    waxGlow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = waxGlow;
+    ctx.fillRect(cx2-12, cy2-6, 24, 20);
+
+    // Äußere Flamme
+    ctx.fillStyle = 'rgba(255,140,20,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 3.5, 6, Math.sin(ft*6)*0.2, 0, Math.PI*2);
+    ctx.fill();
+
+    // Mittlere Flamme
+    ctx.fillStyle = 'rgba(255,210,60,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(fx, fy+1.5, 2, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Kern
+    ctx.fillStyle = 'rgba(255,255,220,1)';
+    ctx.beginPath();
+    ctx.arc(fx, fy+2.5, 1.2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// ─── Licht-Effekt ─────────────────────────────────────────────────────────────
+const lcv = document.createElement('canvas');
+lcv.width = W; lcv.height = H;
+const lc  = lcv.getContext('2d');
+
+function drawDarkness(px, py, radius) {
+    // Komplett schwarz füllen
+    lc.fillStyle = '#000';
+    lc.fillRect(0,0,W,H);
+
+    // Loch mit Farbverlauf (destination-out = transparent machen)
+    lc.globalCompositeOperation = 'destination-out';
+
+    const g = lc.createRadialGradient(px,py,0, px,py,radius);
+    g.addColorStop(0.00, 'rgba(255,255,255,1.00)');
+    g.addColorStop(0.18, 'rgba(255,255,255,0.92)');
+    g.addColorStop(0.42, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.65, 'rgba(255,255,255,0.22)');
+    g.addColorStop(0.82, 'rgba(255,255,255,0.07)');
+    g.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+
+    lc.fillStyle = g;
+    lc.beginPath();
+    lc.arc(px, py, radius, 0, Math.PI*2);
+    lc.fill();
+
+    lc.globalCompositeOperation = 'source-over';
+
+    // Warme Lichtfärbung (additiv über den hellen Bereich)
+    const warm = lc.createRadialGradient(px,py,0, px,py,radius*0.7);
+    warm.addColorStop(0,   'rgba(255,160,40,0.0)');  // transparent (schon ausgeschnitten)
+    warm.addColorStop(0.3, 'rgba(255,140,20,0.0)');
+    warm.addColorStop(0.7, 'rgba(180,80,10,0.25)');
+    warm.addColorStop(1.0, 'rgba(0,0,0,0)');
+    // Dieser Gradient fügt warmen Randsaum zur Finsternis hinzu
+    lc.globalCompositeOperation = 'source-atop';
+    // Lass es weg — zu komplex; stattdessen nur auf main canvas compositing
+    lc.globalCompositeOperation = 'source-over';
+}
+
+// Separate Overlay-Schicht für Lichttönung
+const ocv = document.createElement('canvas');
+ocv.width = W; ocv.height = H;
+const oc  = ocv.getContext('2d');
+
+function drawWarmOverlay(px, py, radius) {
+    oc.clearRect(0,0,W,H);
+    const g = oc.createRadialGradient(px,py,0, px,py,radius);
+    g.addColorStop(0.00, 'rgba(255,180,60,0.12)');
+    g.addColorStop(0.30, 'rgba(255,140,30,0.09)');
+    g.addColorStop(0.60, 'rgba(180,80,10,0.06)');
+    g.addColorStop(1.00, 'rgba(0,0,0,0)');
+    oc.fillStyle = g;
+    oc.beginPath();
+    oc.arc(px, py, radius, 0, Math.PI*2);
+    oc.fill();
+}
+
+// ─── Gewinn-Bildschirm ────────────────────────────────────────────────────────
+function winGame() {
+    gameActive = false;
+    const sec = Math.round((Date.now()-t0)/1000);
+    const m = String(Math.floor(sec/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    overlay.innerHTML = `
+        <h1>Befreit!</h1>
+        <p>Das Tageslicht blendet dich nach der langen Dunkelheit.<br>Du hast das Labyrinth bezwungen!</p>
+        <p style="letter-spacing:2px">Schritte: <strong>${steps}</strong> &nbsp;·&nbsp; Zeit: <strong>${m}:${s}</strong></p>
+        <button id="btnStart">Nochmal spielen</button>`;
+    overlay.style.display = 'flex';
+    document.getElementById('btnStart').addEventListener('click', startGame);
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function updateHUD() {
+    const sec = Math.round((Date.now()-t0)/1000);
+    const m = String(Math.floor(sec/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    hud.textContent = `Schritte: ${steps}   Zeit: ${m}:${s}`;
+}
+
+// ─── Game Loop ────────────────────────────────────────────────────────────────
+let prevT = 0;
+function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(now - prevT, 50); // max 50ms cap
+    prevT = now;
+
+    // Spieler sanft bewegen
+    const dpx = player.tx - player.px;
+    const dpy = player.ty - player.py;
+    const dist = Math.hypot(dpx, dpy);
+    if (dist > 0.8) {
+        player.px += dpx * (1 - Math.pow(0.012, dt/16));
+        player.py += dpy * (1 - Math.pow(0.012, dt/16));
+    } else {
+        player.px = player.tx;
+        player.py = player.ty;
+        if (moving && dist < 0.8) moving = false;
+    }
+
+    // Flammen-Flackern
+    lightPhase += dt * 0.001;
+    const flicker = Math.sin(lightPhase*3.7)*4
+                  + Math.sin(lightPhase*7.1)*2.5
+                  + Math.sin(lightPhase*13.3)*1.2;
+    lightRTarget = 125 + flicker;
+    lightR += (lightRTarget - lightR) * 0.08;
+
+    // ── Zeichnen ──
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,W,H);
+
+    // Labyrinth-Hintergrund
+    ctx.drawImage(mcv, 0,0);
+
+    // Spielfigur
+    if (gameActive) {
+        drawPlayer(player.px, player.py, now);
+        updateHUD();
+    }
+
+    // Warme Licht-Tönung über Sichtbereich
+    drawWarmOverlay(player.px, player.py, lightR);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(ocv, 0,0);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Dunkelheit-Maske (mit Loch)
+    drawDarkness(player.px, player.py, lightR);
+    ctx.drawImage(lcv, 0,0);
+}
+requestAnimationFrame(loop);
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+function startGame() {
+    overlay.style.display = 'none';
+    hud.textContent = '';
+    initGame();
+}
+
+document.getElementById('btnStart').addEventListener('click', startGame);
+</script>
+</body>
+</html>
