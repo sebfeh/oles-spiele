@@ -2,38 +2,122 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Ole's Abenteuer</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: monospace; color: #eee; }
-h1 { font-size: 22px; margin-bottom: 8px; color: #FFD700; letter-spacing: 2px; }
-#gameContainer { position: relative; width: 700px; }
-#canvas { width: 700px; height: 400px; border-radius: 12px; border: 1px solid #444; display: block; background: #87CEEB; }
-#hud { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 14px; color: #ccc; }
-#controls { display: flex; gap: 10px; padding: 10px 0 4px; justify-content: space-between; }
+html, body {
+  width: 100%; height: 100%;
+  background: #1a1a2e;
+  overflow: hidden;
+  font-family: monospace;
+  color: #eee;
+  touch-action: none;
+}
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#gameContainer {
+  position: relative;
+  width: min(100vw, calc((100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 700 / 400));
+  height: min(calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)), calc(100vw * 400 / 700));
+  margin-top: env(safe-area-inset-top);
+  margin-bottom: env(safe-area-inset-bottom);
+}
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #87CEEB;
+}
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 15px;
+  color: #fff;
+  text-shadow: 1px 1px 3px #000;
+  pointer-events: none;
+  z-index: 10;
+}
+#controls {
+  position: absolute;
+  bottom: 10px; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 14px;
+  z-index: 10;
+}
 #controls-left { display: flex; gap: 10px; }
 #controls-right { display: flex; }
 .ctrl-btn {
-  background: #2a2a4a; border: 1px solid #555; border-radius: 10px;
-  color: #eee; font-size: 20px; width: 58px; height: 58px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  background: rgba(255,255,255,0.12);
+  border: 2px solid rgba(255,255,255,0.35);
+  border-radius: 50%;
+  color: #eee;
+  font-size: 22px;
+  width: 64px; height: 64px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: background 0.1s;
+  user-select: none;
 }
-.ctrl-btn:active { background: #3a3a6a; }
-#info { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
+.ctrl-btn:active { background: rgba(255,255,255,0.32); }
+#info {
+  display: none;
+}
+#portrait-hint {
+  display: none;
+  position: fixed; inset: 0;
+  background: #1a1a2e;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; z-index: 100;
+  text-align: center; padding: 30px;
+}
+#portrait-hint span { font-size: 64px; }
+#portrait-hint p { font-size: 18px; color: #aaa; }
+@media (orientation: portrait) {
+  #portrait-hint { display: flex; }
+  #gameContainer { display: none; }
+}
+@media (orientation: landscape) {
+  #canvas { border-radius: 6px; }
+}
+/* Größere Buttons auf kleinen Screens */
+@media (max-height: 420px) {
+  .ctrl-btn { width: 52px; height: 52px; font-size: 18px; }
+  #hud { font-size: 13px; padding: 4px 10px; }
+  #controls { bottom: 6px; padding: 0 10px; }
+}
 </style>
 </head>
 <body>
-<h1>🧒 Ole's Abenteuer</h1>
+
+<div id="portrait-hint">
+  <span>📱↔️</span>
+  <p>Bitte drehe dein Gerät<br>ins <strong>Querformat</strong></p>
+</div>
+
 <div id="gameContainer">
+  <canvas id="canvas" width="700" height="400"></canvas>
   <div id="hud">
     <span>⭐ <span id="score">0</span></span>
     <span id="levelLabel">Level 1</span>
     <span>❤️ <span id="lives">3</span></span>
   </div>
-  <canvas id="canvas" width="700" height="400"></canvas>
   <div id="controls">
     <div id="controls-left">
       <button class="ctrl-btn" id="btnLeft">◀</button>
@@ -44,13 +128,28 @@ h1 { font-size: 22px; margin-bottom: 8px; color: #FFD700; letter-spacing: 2px; }
     </div>
   </div>
 </div>
-<div id="info">Pfeiltasten / WASD / Leertaste &nbsp;|&nbsp; Gegner durch Draufspringen besiegen &nbsp;|&nbsp; Rote Fahne = Ziel</div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const W = 700, H = 400;
 canvas.width = W; canvas.height = H;
+
+// Vollbild + Querformat anfordern beim ersten Touch
+let fullscreenRequested = false;
+function requestFullscreenLandscape() {
+  if (fullscreenRequested) return;
+  fullscreenRequested = true;
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(()=>{});
+  }
+}
+document.addEventListener('touchstart', requestFullscreenLandscape, {once: true});
+document.addEventListener('mousedown',  requestFullscreenLandscape, {once: true});
+document.addEventListener('keydown',    requestFullscreenLandscape, {once: true});
 
 let score = 0, lives = 3, level = 1, gameState = 'start', cameraX = 0;
 let keys = {};
@@ -375,21 +474,21 @@ function loop() {
 
   if (gameState==='start') {
     drawBG();
-    drawScreen("Ole's Abenteuer", 'Leertaste / ▲ zum Starten', 'Pfeiltasten oder Buttons steuern');
+    drawScreen("Ole's Abenteuer", '▲ zum Starten', 'Pfeiltasten oder Buttons steuern');
     if ((inp.jump && !jumpPrev)||inp.left||inp.right) resetGame();
     jumpPrev=inp.jump;
     requestAnimationFrame(loop); return;
   }
   if (gameState==='gameover') {
     drawBG();
-    drawScreen('Game Over', 'Punkte: '+score, 'Leertaste / ▲ für Neustart');
+    drawScreen('Game Over', 'Punkte: '+score, '▲ für Neustart');
     if (inp.jump && !jumpPrev) resetGame();
     jumpPrev=inp.jump;
     requestAnimationFrame(loop); return;
   }
   if (gameState==='win') {
     drawBG();
-    drawScreen('Gewonnen! 🏆', 'Punkte: '+score+'  Ole ist der Beste!', 'Leertaste / ▲ für neues Spiel');
+    drawScreen('Gewonnen! 🏆', 'Punkte: '+score+'  Ole ist der Beste!', '▲ für neues Spiel');
     if (inp.jump && !jumpPrev) resetGame();
     jumpPrev=inp.jump;
     requestAnimationFrame(loop); return;
@@ -426,6 +525,7 @@ const btnJ = document.getElementById('btnJump');
 function addTouch(btn, setter) {
   btn.addEventListener('touchstart', e=>{ e.preventDefault(); setter(true);  }, {passive:false});
   btn.addEventListener('touchend',   e=>{ e.preventDefault(); setter(false); }, {passive:false});
+  btn.addEventListener('touchcancel',e=>{ e.preventDefault(); setter(false); }, {passive:false});
   btn.addEventListener('mousedown',  ()=> setter(true));
   btn.addEventListener('mouseup',    ()=> setter(false));
   btn.addEventListener('mouseleave', ()=> setter(false));
