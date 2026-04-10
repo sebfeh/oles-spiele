@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schweinchen Galopp</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif; }
+h1 { color: #fff; font-size: 22px; font-weight: 600; margin-bottom: 12px; letter-spacing: 1px; }
+#gw { position: relative; width: min(100vw, 900px); height: min(calc(100vw * 0.58), 520px); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); }
+#gc { display: block; width: 100%; height: 100%; }
+#hud { position: absolute; top: 12px; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
+.hb { background: rgba(0,0,0,.42); color: #fff; border-radius: 8px; padding: 6px 20px; font-size: 17px; font-weight: 600; letter-spacing: .5px; }
+#hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.42); color: #fff; border-radius: 8px; padding: 5px 16px; font-size: 13px; white-space: nowrap; pointer-events: none; transition: opacity .8s; }
+#controls { margin-top: 14px; color: rgba(255,255,255,0.5); font-size: 13px; text-align: center; line-height: 1.8; }
+</style>
+</head>
+<body>
+<h1>🐷 Schweinchen Galopp 🐒</h1>
+<div id="gw">
+  <canvas id="gc"></canvas>
+  <div id="hud"><div class="hb">🍌 <span id="sc">0</span>/20 &nbsp;|&nbsp; ⏱ <span id="tm">0:00</span></div></div>
+  <div id="win" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.75);flex-direction:column;align-items:center;justify-content:center;color:#fff;">
+    <div style="font-size:52px;margin-bottom:8px">🎉</div>
+    <div style="font-size:30px;font-weight:700;margin-bottom:10px">Gewonnen!</div>
+    <div style="font-size:20px">20 Bananen in <span id="wt" style="font-weight:700"></span></div>
+  </div>
+  <div id="hint">← → Lenken &nbsp;|&nbsp; ↑ Turbo &nbsp;|&nbsp; ↓ Bremsen &nbsp;|&nbsp; Wischen auf Touchscreen</div>
+</div>
+<div id="controls">Das Äffchen sitzt verkehrt herum – Bananen einsammeln!</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const canvas=document.getElementById('gc'),wrap=document.getElementById('gw'),scEl=document.getElementById('sc'),hint=document.getElementById('hint'),tmEl=document.getElementById('tm'),winEl=document.getElementById('win'),wtEl=document.getElementById('wt');
+setTimeout(()=>hint.style.opacity='0',5000);
+let W=wrap.clientWidth,H=wrap.clientHeight;
+const R=new THREE.WebGLRenderer({canvas,antialias:true});
+R.setSize(W,H);R.setPixelRatio(Math.min(devicePixelRatio,2));
+R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;
+
+const S=new THREE.Scene();
+S.background=new THREE.Color(0x77bbdd);
+S.fog=new THREE.Fog(0x77bbdd,20,48);
+
+const C=new THREE.PerspectiveCamera(65,W/H,.1,100);
+S.add(new THREE.AmbientLight(0xffffff,.65));
+const sun=new THREE.DirectionalLight(0xfff3cc,1.1);
+sun.position.set(8,14,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);S.add(sun);
+
+// Checkered ground texture
+const tc=document.createElement('canvas');tc.width=tc.height=128;
+const cx=tc.getContext('2d');
+cx.fillStyle='#5aaa38';cx.fillRect(0,0,128,128);
+cx.fillStyle='#4c9830';cx.fillRect(0,0,64,64);cx.fillRect(64,64,64,64);
+const tex=new THREE.CanvasTexture(tc);
+tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(30,30);
+
+const gnd=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshLambertMaterial({map:tex}));
+gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;S.add(gnd);
+
+const mt=c=>new THREE.MeshLambertMaterial({color:c});
+const M={pk:mt(0xffaabb),dpk:mt(0xee7799),br:mt(0x7B3A10),lbr:mt(0xC07030),
+  yw:mt(0xFFD700),dyw:mt(0x8a6a00),blk:mt(0x111111),grn:mt(0x2a6e1e),trk:mt(0x6B4226),ns:mt(0xcc5577)};
+
+const bx=(w,h,d,m,x,y,z)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=true;return o;};
+
+// === PIG ===
+const pig=new THREE.Group();S.add(pig);
+pig.add(bx(1.1,.65,.75,M.pk,0,.5,0));
+pig.add(bx(.58,.5,.58,M.pk,.68,.65,0));
+pig.add(bx(.14,.2,.08,M.dpk,.62,.93,.24));
+pig.add(bx(.14,.2,.08,M.dpk,.62,.93,-.24));
+const sn=new THREE.Mesh(new THREE.CylinderGeometry(.14,.16,.1,8),M.dpk);
+sn.rotation.z=Math.PI/2;sn.position.set(.99,.62,0);pig.add(sn);
+pig.add(bx(.03,.04,.04,M.ns,1.04,.65,.06));
+pig.add(bx(.03,.04,.04,M.ns,1.04,.65,-.06));
+pig.add(bx(.05,.06,.04,M.blk,.87,.8,.27));
+pig.add(bx(.05,.06,.04,M.blk,.87,.8,-.27));
+const legs=[];
+[[.3,.3],[.3,-.3],[-.3,.3],[-.3,-.3]].forEach(([x,z])=>{const l=bx(.18,.33,.18,M.dpk,x,.17,z);pig.add(l);legs.push(l);});
+const tg=new THREE.TorusGeometry(.13,.04,6,12,Math.PI*1.5);
+const tm=new THREE.Mesh(tg,M.pk);tm.position.set(-.6,.62,0);tm.rotation.set(0,Math.PI/2,Math.PI/4);pig.add(tm);
+
+// === MONKEY (backwards!) ===
+const monk=new THREE.Group();
+monk.position.set(-.05,.88,0);monk.rotation.y=-Math.PI/2;pig.add(monk);
+monk.add(bx(.3,.38,.26,M.br,0,.19,0));
+const mhd=new THREE.Mesh(new THREE.SphereGeometry(.19,12,12),M.br);
+mhd.position.set(0,.52,0);mhd.castShadow=true;monk.add(mhd);
+const mfc=new THREE.Mesh(new THREE.CircleGeometry(.13,12),M.lbr);
+mfc.position.set(0,.49,.18);monk.add(mfc);
+monk.add(bx(.05,.05,.05,M.blk,-.07,.56,.17));
+monk.add(bx(.05,.05,.05,M.blk,.07,.56,.17));
+monk.add(bx(.12,.02,.02,M.blk,0,.46,.18));
+monk.add(bx(.1,.28,.1,M.br,-.22,.18,0));
+monk.add(bx(.1,.28,.1,M.br,.22,.18,0));
+monk.add(bx(.1,.25,.1,M.br,-.15,0,.18));
+monk.add(bx(.1,.25,.1,M.br,.15,0,.18));
+const mtg=new THREE.TorusGeometry(.15,.035,6,12,Math.PI*1.5);
+const mtm=new THREE.Mesh(mtg,M.br);mtm.position.set(0,.08,-.16);mtm.rotation.x=-Math.PI/4;monk.add(mtm);
+
+// === BANANAS ===
+function mkBan(){
+  const g=new THREE.Group();
+  const pts=[];
+  for(let i=0;i<=12;i++){const a=(i/12)*Math.PI*.62-.18;pts.push(new THREE.Vector3(Math.cos(a)*.22,Math.sin(a)*.22,0));}
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),14,.056,8,false),M.yw));
+  [pts[0],pts[pts.length-1]].forEach(p=>{const t=new THREE.Mesh(new THREE.SphereGeometry(.06,6,6),M.dyw);t.position.copy(p);g.add(t);});
+  return g;
+}
+
+const WORLD=24,bans=[];
+for(let i=0;i<20;i++){
+  const b=mkBan();
+  let x,z;do{x=(Math.random()-.5)*WORLD*2;z=(Math.random()-.5)*WORLD*2;}while(x*x+z*z<25);
+  b.position.set(x,.42,z);S.add(b);bans.push(b);
+}
+
+// === TREES ===
+const trees=[];
+for(let i=0;i<28;i++){
+  const t=new THREE.Group();
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.12,.16,.9,7),M.trk);tr.position.y=.45;t.add(tr);
+  [0,1,2].forEach(j=>{const cn=new THREE.Mesh(new THREE.ConeGeometry(.7-j*.1,1.0,7),M.grn);cn.position.y=1.05+j*.5;t.add(cn);});
+  let x,z;do{x=(Math.random()-.5)*52;z=(Math.random()-.5)*52;}while(x*x+z*z<42);
+  t.position.set(x,0,z);S.add(t);trees.push(t);
+}
+
+// === CLOUDS ===
+for(let i=0;i<8;i++){
+  const cl=new THREE.Group();
+  const cm=mt(0xffffff);
+  [[0,0,0,.7],[.5,-.1,0,.5],[-.5,-.1,0,.5],[.25,.3,0,.45],[-.25,.3,0,.45]].forEach(([cx,cy,cz,r])=>{
+    const sp=new THREE.Mesh(new THREE.SphereGeometry(r,8,6),cm);sp.position.set(cx,cy,cz);cl.add(sp);
+  });
+  cl.position.set((Math.random()-.5)*60,8+Math.random()*6,(Math.random()-.5)*60);
+  S.add(cl);
+}
+
+// === CONTROLS ===
+let score=0,angle=0,gameWon=false,startTime=null,treeHitTime=-999;
+const keys={};
+window.addEventListener('keydown',e=>{keys[e.key]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();});
+window.addEventListener('keyup',e=>{keys[e.key]=false;});
+let tx0=0;
+canvas.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;e.preventDefault();},{passive:false});
+canvas.addEventListener('touchmove',e=>{const dx=e.touches[0].clientX-tx0;keys['ArrowLeft']=dx<-15;keys['ArrowRight']=dx>15;e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',()=>{keys['ArrowLeft']=keys['ArrowRight']=false;});
+
+// === GAME LOOP ===
+let lt=0;
+function fmtTime(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0');}
+function loop(t){
+  if(!gameWon)requestAnimationFrame(loop);
+  const dt=Math.min((t-lt)/16.7,3);lt=t;
+  if(startTime===null&&t>0)startTime=t;
+  if(startTime!==null&&!gameWon)tmEl.textContent=fmtTime(t-startTime);
+
+  if(keys['ArrowLeft'])angle+=.036*dt;
+  if(keys['ArrowRight'])angle-=.036*dt;
+  const spd=keys['ArrowUp']?.13:keys['ArrowDown']?.02:.075;
+
+  pig.position.x+=Math.sin(angle)*spd*dt;
+  pig.position.z+=Math.cos(angle)*spd*dt;
+  pig.rotation.y=angle-Math.PI/2;
+
+  if(pig.position.x>WORLD)pig.position.x=-WORLD;
+  if(pig.position.x<-WORLD)pig.position.x=WORLD;
+  if(pig.position.z>WORLD)pig.position.z=-WORLD;
+  if(pig.position.z<-WORLD)pig.position.z=WORLD;
+
+  const la=Math.sin(t*.015)*.5*(spd/.075);
+  legs[0].rotation.x=la;legs[2].rotation.x=-la;
+  legs[1].rotation.x=-la;legs[3].rotation.x=la;
+
+  monk.position.y=.88+Math.sin(t*.02)*.018;
+  monk.rotation.z=Math.sin(t*.007)*.07;
+
+  bans.forEach(b=>{
+    if(!b.visible)return;
+    b.rotation.y+=.03*dt;
+    b.position.y=.42+Math.sin(t*.003+b.position.x)*.08;
+    const dx=b.position.x-pig.position.x,dz=b.position.z-pig.position.z;
+    if(dx*dx+dz*dz<1.3){
+      b.visible=false;score++;scEl.textContent=score;
+      if(score>=20){gameWon=true;wtEl.textContent=fmtTime(t-startTime);winEl.style.display='flex';return;}
+      setTimeout(()=>{
+        let nx,nz;
+        do{nx=(Math.random()-.5)*WORLD*2;nz=(Math.random()-.5)*WORLD*2;}
+        while((nx-pig.position.x)**2+(nz-pig.position.z)**2<30);
+        b.position.set(nx,.42,nz);b.visible=true;
+      },2500);
+    }
+  });
+
+  if(t-treeHitTime>1500){
+    for(const tr of trees){
+      const dx=tr.position.x-pig.position.x,dz=tr.position.z-pig.position.z;
+      if(dx*dx+dz*dz<.8){
+        treeHitTime=t;
+        if(score>0){score--;scEl.textContent=score;}
+        break;
+      }
+    }
+  }
+
+  C.position.set(pig.position.x-Math.sin(angle)*4,pig.position.y+2.5,pig.position.z-Math.cos(angle)*4);
+  C.lookAt(pig.position.x+Math.sin(angle)*1.5,pig.position.y+.5,pig.position.z+Math.cos(angle)*1.5);
+  R.render(S,C);
+}
+loop(0);
+
+window.addEventListener('resize',()=>{
+  W=wrap.clientWidth;H=wrap.clientHeight;
+  R.setSize(W,H);C.aspect=W/H;C.updateProjectionMatrix();
+});
+})();
+</script>
+</body>
+</html>
