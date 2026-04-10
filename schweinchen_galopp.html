@@ -127,6 +127,18 @@ for(let i=0;i<28;i++){
   t.position.set(x,0,z);S.add(t);trees.push(t);
 }
 
+// === CRASH STARS ===
+const crashStars=new THREE.Group();crashStars.visible=false;S.add(crashStars);const starMeshes=[];
+[0xFFFF00,0xFF8800,0xFFDD00,0xFF4400,0xFFAA00,0xFF6600].forEach(c=>{
+  const s=new THREE.Mesh(new THREE.OctahedronGeometry(.1,0),mt(c));crashStars.add(s);starMeshes.push(s);
+});
+const crashOverlay=document.createElement('div');
+crashOverlay.style.cssText='position:absolute;inset:0;background:rgba(255,80,0,0);pointer-events:none;border-radius:12px;transition:background .15s;';
+wrap.appendChild(crashOverlay);
+const collectOverlay=document.createElement('div');
+collectOverlay.style.cssText='position:absolute;inset:0;background:rgba(80,255,80,0);pointer-events:none;border-radius:12px;transition:background .12s;';
+wrap.appendChild(collectOverlay);
+
 // === CLOUDS ===
 for(let i=0;i<8;i++){
   const cl=new THREE.Group();
@@ -139,7 +151,9 @@ for(let i=0;i<8;i++){
 }
 
 // === CONTROLS ===
-let score=0,angle=0,gameWon=false,startTime=null,treeHitTime=-999;
+const collectEffects=[];let monkCollectStart=-999;
+let score=0,angle=0,gameWon=false,startTime=null,treeHitTime=-999,crashActive=false,crashStart=0;
+const CRASH_DUR=1000;
 const keys={};
 window.addEventListener('keydown',e=>{keys[e.key]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();});
 window.addEventListener('keyup',e=>{keys[e.key]=false;});
@@ -147,6 +161,15 @@ let tx0=0;
 canvas.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;e.preventDefault();},{passive:false});
 canvas.addEventListener('touchmove',e=>{const dx=e.touches[0].clientX-tx0;keys['ArrowLeft']=dx<-15;keys['ArrowRight']=dx>15;e.preventDefault();},{passive:false});
 canvas.addEventListener('touchend',()=>{keys['ArrowLeft']=keys['ArrowRight']=false;});
+
+// === COLLECT EFFECT ===
+function spawnCollectEffect(x,y,z){
+  const g=new THREE.Group();const ms=[];
+  [0xFFFF00,0xFFE000,0xFFC200,0xFFDD00,0xFF9900,0x88FF44,0x44FF88,0xFFAA00].forEach(c=>{
+    const s=new THREE.Mesh(new THREE.OctahedronGeometry(.09,0),mt(c));g.add(s);ms.push(s);
+  });
+  g.position.set(x,y,z);S.add(g);collectEffects.push({g,ms,startT:-1,oy:y});
+}
 
 // === GAME LOOP ===
 let lt=0;
@@ -157,25 +180,54 @@ function loop(t){
   if(startTime===null&&t>0)startTime=t;
   if(startTime!==null&&!gameWon)tmEl.textContent=fmtTime(t-startTime);
 
-  if(keys['ArrowLeft'])angle+=.036*dt;
-  if(keys['ArrowRight'])angle-=.036*dt;
-  const spd=keys['ArrowUp']?.13:keys['ArrowDown']?.02:.075;
+  const crashing=crashActive&&(t-crashStart<CRASH_DUR);
+  if(crashActive&&!crashing){crashActive=false;crashStars.visible=false;pig.rotation.z=0;pig.position.y=0;}
 
-  pig.position.x+=Math.sin(angle)*spd*dt;
-  pig.position.z+=Math.cos(angle)*spd*dt;
-  pig.rotation.y=angle-Math.PI/2;
+  let spd=.075;
+  if(!crashing){
+    if(keys['ArrowLeft'])angle+=.036*dt;
+    if(keys['ArrowRight'])angle-=.036*dt;
+    spd=keys['ArrowUp']?.13:keys['ArrowDown']?.02:.075;
+    pig.position.x+=Math.sin(angle)*spd*dt;
+    pig.position.z+=Math.cos(angle)*spd*dt;
+    pig.rotation.y=angle-Math.PI/2;
+    if(pig.position.x>WORLD)pig.position.x=-WORLD;
+    if(pig.position.x<-WORLD)pig.position.x=WORLD;
+    if(pig.position.z>WORLD)pig.position.z=-WORLD;
+    if(pig.position.z<-WORLD)pig.position.z=WORLD;
+  }
 
-  if(pig.position.x>WORLD)pig.position.x=-WORLD;
-  if(pig.position.x<-WORLD)pig.position.x=WORLD;
-  if(pig.position.z>WORLD)pig.position.z=-WORLD;
-  if(pig.position.z<-WORLD)pig.position.z=WORLD;
+  if(crashing){
+    const cp=(t-crashStart)/CRASH_DUR;
+    pig.rotation.z=Math.sin(cp*Math.PI*8)*.42*(1-cp*cp);
+    pig.position.y=Math.abs(Math.sin(cp*Math.PI*3))*.22*(1-cp);
+    pig.rotation.y=angle-Math.PI/2;
+    legs[0].rotation.x=.55;legs[1].rotation.x=-.55;legs[2].rotation.x=.55;legs[3].rotation.x=-.55;
+    crashStars.visible=true;
+    crashStars.position.set(pig.position.x,pig.position.y+1.2,pig.position.z);
+    starMeshes.forEach((s,i)=>{
+      const a=(i/starMeshes.length)*Math.PI*2+t*.014;
+      const r=.55+Math.sin(cp*Math.PI)*.22;
+      s.position.set(Math.cos(a)*r,Math.sin(t*.018+i*.9)*.18,Math.sin(a)*r);
+      s.rotation.x+=.12*dt;s.rotation.y+=.18*dt;
+    });
+  } else {
+    const la=Math.sin(t*.015)*.5*(spd/.075);
+    legs[0].rotation.x=la;legs[2].rotation.x=-la;
+    legs[1].rotation.x=-la;legs[3].rotation.x=la;
+  }
 
-  const la=Math.sin(t*.015)*.5*(spd/.075);
-  legs[0].rotation.x=la;legs[2].rotation.x=-la;
-  legs[1].rotation.x=-la;legs[3].rotation.x=la;
-
-  monk.position.y=.88+Math.sin(t*.02)*.018;
-  monk.rotation.z=Math.sin(t*.007)*.07;
+  const mcp=monkCollectStart>=0?Math.min((t-monkCollectStart)/650,1):-1;
+  if(mcp>=0&&mcp<1){
+    monk.position.y=.88+Math.sin(t*.02)*.018+Math.sin(mcp*Math.PI)*.28;
+    monk.rotation.y=-Math.PI/2+mcp*Math.PI*2;
+    monk.rotation.z=Math.sin(t*.007)*.07;
+  } else {
+    monk.position.y=.88+Math.sin(t*.02)*.018;
+    monk.rotation.y=-Math.PI/2;
+    monk.rotation.z=Math.sin(t*.007)*.07;
+    if(mcp>=1)monkCollectStart=-999;
+  }
 
   bans.forEach(b=>{
     if(!b.visible)return;
@@ -184,6 +236,10 @@ function loop(t){
     const dx=b.position.x-pig.position.x,dz=b.position.z-pig.position.z;
     if(dx*dx+dz*dz<1.3){
       b.visible=false;score++;scEl.textContent=score;
+      collectOverlay.style.background='rgba(80,255,80,0.38)';
+      setTimeout(()=>collectOverlay.style.background='rgba(80,255,80,0)',180);
+      spawnCollectEffect(b.position.x,b.position.y,b.position.z);
+      monkCollectStart=t;
       if(score>=20){gameWon=true;wtEl.textContent=fmtTime(t-startTime);winEl.style.display='flex';return;}
       setTimeout(()=>{
         let nx,nz;
@@ -194,19 +250,47 @@ function loop(t){
     }
   });
 
-  if(t-treeHitTime>1500){
+  if(!crashing&&t-treeHitTime>1500){
     for(const tr of trees){
       const dx=tr.position.x-pig.position.x,dz=tr.position.z-pig.position.z;
       if(dx*dx+dz*dz<.8){
-        treeHitTime=t;
+        treeHitTime=t;crashActive=true;crashStart=t;
+        crashOverlay.style.background='rgba(255,80,0,0.45)';
+        setTimeout(()=>crashOverlay.style.background='rgba(255,80,0,0)',220);
         if(score>0){score--;scEl.textContent=score;}
         break;
       }
     }
   }
 
-  C.position.set(pig.position.x-Math.sin(angle)*4,pig.position.y+2.5,pig.position.z-Math.cos(angle)*4);
+  if(crashing){
+    const cp=(t-crashStart)/CRASH_DUR;
+    const shk=.18*(1-cp*cp);
+    C.position.set(
+      pig.position.x-Math.sin(angle)*4+(Math.random()-.5)*shk,
+      pig.position.y+2.5+(Math.random()-.5)*shk*.4,
+      pig.position.z-Math.cos(angle)*4+(Math.random()-.5)*shk
+    );
+  } else {
+    C.position.set(pig.position.x-Math.sin(angle)*4,pig.position.y+2.5,pig.position.z-Math.cos(angle)*4);
+  }
   C.lookAt(pig.position.x+Math.sin(angle)*1.5,pig.position.y+.5,pig.position.z+Math.cos(angle)*1.5);
+
+  for(let i=collectEffects.length-1;i>=0;i--){
+    const ef=collectEffects[i];
+    if(ef.startT<0)ef.startT=t;
+    const cp=Math.min((t-ef.startT)/700,1);
+    if(cp>=1){S.remove(ef.g);collectEffects.splice(i,1);continue;}
+    ef.ms.forEach((s,idx)=>{
+      const a=(idx/ef.ms.length)*Math.PI*2;
+      const r=cp*1.4;
+      s.position.set(Math.cos(a)*r,Math.sin(cp*Math.PI)*.55+cp*.1,Math.sin(a)*r);
+      const sc=(1-cp)*1.6;s.scale.setScalar(sc);
+      s.rotation.x+=.15*dt;s.rotation.y+=.2*dt;
+    });
+    ef.g.position.y=ef.oy;
+  }
+
   R.render(S,C);
 }
 loop(0);
