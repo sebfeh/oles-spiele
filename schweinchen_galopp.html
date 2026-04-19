@@ -21,10 +21,16 @@ h1 { color: #fff; font-size: 22px; font-weight: 600; margin-bottom: 12px; letter
 <div id="gw">
   <canvas id="gc"></canvas>
   <div id="hud"><div class="hb">🍌 <span id="sc">0</span>/20 &nbsp;|&nbsp; ⏱ <span id="tm">0:00</span></div></div>
-  <div id="win" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.75);flex-direction:column;align-items:center;justify-content:center;color:#fff;">
-    <div style="font-size:52px;margin-bottom:8px">🎉</div>
-    <div style="font-size:30px;font-weight:700;margin-bottom:10px">Gewonnen!</div>
-    <div style="font-size:20px">20 Bananen in <span id="wt" style="font-weight:700"></span></div>
+  <div id="win" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.82);flex-direction:column;align-items:center;justify-content:center;color:#fff;overflow-y:auto;padding:20px 12px;">
+    <div style="font-size:46px;margin-bottom:4px">🎉</div>
+    <div style="font-size:28px;font-weight:700;margin-bottom:4px">Gewonnen!</div>
+    <div style="font-size:17px;margin-bottom:14px">20 Bananen in <span id="wt" style="font-weight:700"></span></div>
+    <div id="hs-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="hs-name" type="text" maxlength="20" placeholder="Dein Name" style="padding:7px 12px;border-radius:8px;border:none;font-size:15px;width:145px;outline:none"/>
+      <button id="hs-btn" style="padding:7px 16px;border-radius:8px;border:none;background:#FFD700;color:#333;font-weight:700;font-size:15px;cursor:pointer">Eintragen</button>
+    </div>
+    <div id="hs-list" style="width:min(320px,92%);background:rgba(255,255,255,.09);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px;min-height:40px"></div>
+    <button id="hs-replay" style="padding:7px 22px;border-radius:8px;border:none;background:#4488ff;color:#fff;font-weight:700;font-size:15px;cursor:pointer">🔄 Nochmal</button>
   </div>
   <div id="hint">← → Lenken &nbsp;|&nbsp; ↑ Turbo &nbsp;|&nbsp; ↓ Bremsen &nbsp;|&nbsp; Wischen auf Touchscreen</div>
 </div>
@@ -152,7 +158,7 @@ for(let i=0;i<8;i++){
 
 // === CONTROLS ===
 const collectEffects=[];let monkCollectStart=-999;
-let score=0,angle=0,gameWon=false,startTime=null,treeHitTime=-999,crashActive=false,crashStart=0;
+let score=0,angle=0,gameWon=false,startTime=null,treeHitTime=-999,crashActive=false,crashStart=0,finalScore=0;
 const CRASH_DUR=1000;
 const keys={};
 window.addEventListener('keydown',e=>{keys[e.key]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();});
@@ -240,7 +246,7 @@ function loop(t){
       setTimeout(()=>collectOverlay.style.background='rgba(80,255,80,0)',180);
       spawnCollectEffect(b.position.x,b.position.y,b.position.z);
       monkCollectStart=t;
-      if(score>=20){gameWon=true;wtEl.textContent=fmtTime(t-startTime);winEl.style.display='flex';return;}
+      if(score>=20){gameWon=true;const elapsed=t-startTime;wtEl.textContent=fmtTime(elapsed);finalScore=Math.max(1,10000-Math.floor(elapsed/1000));showWin();return;}
       setTimeout(()=>{
         let nx,nz;
         do{nx=(Math.random()-.5)*WORLD*2;nz=(Math.random()-.5)*WORLD*2;}
@@ -293,6 +299,45 @@ function loop(t){
 
   R.render(S,C);
 }
+// === HIGHSCORES ===
+const HS_GAME='schweinchen_galopp';
+const hsListEl=document.getElementById('hs-list');
+const hsNameEl=document.getElementById('hs-name');
+const hsBtnEl=document.getElementById('hs-btn');
+const hsFormEl=document.getElementById('hs-form');
+document.getElementById('hs-replay').addEventListener('click',()=>location.reload());
+
+function secsFromScore(s){const sec=10000-s;const m=Math.floor(sec/60);return m+':'+String(sec%60).padStart(2,'0');}
+
+function renderHSList(scores){
+  if(!scores||!scores.length){hsListEl.innerHTML='<div style="color:rgba(255,255,255,.45);text-align:center;padding:4px 0">Noch keine Einträge</div>';return;}
+  hsListEl.innerHTML='<div style="font-weight:700;font-size:13px;opacity:.6;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Bestenliste</div>'+
+    scores.map((s,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.1)"><span>${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1+'.'} ${s.name}</span><span style="font-weight:700">${secsFromScore(s.score)} <span style="opacity:.45;font-size:12px">${s.date}</span></span></div>`).join('');
+}
+
+async function showWin(){
+  winEl.style.display='flex';
+  hsListEl.innerHTML='<div style="color:rgba(255,255,255,.45);text-align:center">Lade…</div>';
+  try{const r=await fetch('highscore.php?game='+HS_GAME);const d=await r.json();renderHSList(d.scores);}
+  catch(e){hsListEl.innerHTML='<div style="color:rgba(255,100,100,.7);text-align:center">Fehler beim Laden</div>';}
+  hsNameEl.focus();
+}
+
+hsBtnEl.addEventListener('click',async()=>{
+  const name=hsNameEl.value.trim();
+  if(!name)return;
+  hsBtnEl.disabled=true;hsBtnEl.textContent='…';
+  try{
+    const r=await fetch('highscore.php?game='+HS_GAME,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score:finalScore})});
+    const d=await r.json();
+    renderHSList(d.scores);
+    hsFormEl.style.display='none';
+  }catch(e){
+    hsBtnEl.disabled=false;hsBtnEl.textContent='Eintragen';
+    hsListEl.innerHTML='<div style="color:rgba(255,100,100,.7);text-align:center">Fehler beim Speichern</div>';
+  }
+});
+
 loop(0);
 
 window.addEventListener('resize',()=>{
