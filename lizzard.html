@@ -154,6 +154,50 @@
     transition: opacity 0.05s;
     border-radius: 13px;
   }
+
+  #nameInput {
+    background: rgba(255,255,255,0.1);
+    border: 2px solid #5aad30;
+    border-radius: 8px;
+    color: #fff;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1.1rem;
+    padding: 8px 14px;
+    text-align: center;
+    width: min(240px, 80vw);
+    outline: none;
+    margin-top: 4px;
+  }
+  #nameInput::placeholder { color: #555; }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+
+  .ov-btn {
+    background: rgba(90,173,48,0.2);
+    border: 2px solid #5aad30;
+    border-radius: 8px;
+    color: #c8f088;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .ov-btn:hover { background: rgba(90,173,48,0.4); }
+  .ov-btn.primary { background: #5aad30; color: #fff; border-color: #5aad30; }
+  .ov-btn.primary:hover { background: #6abf3a; }
+
+  #hs-table {
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    color: #ddf5b0;
+    margin: 4px 0;
+    min-width: 240px;
+  }
+  #hs-table th { color: #a8e063; padding: 4px 10px; border-bottom: 1px solid #3a6a20; text-align: left; }
+  #hs-table td { padding: 3px 10px; }
+  #hs-table tr.hl td { background: rgba(90,173,48,0.3); color: #fff; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -312,6 +356,110 @@ function playSchleck() {
     osc.stop(now + 0.09);
   } catch (e) { /* audio not available */ }
 }
+
+// ── Highscore ──────────────────────────────────────────────────────────────
+const HIGHSCORE_API = 'highscore.php?game=lizzard';
+let highscores = [];
+
+async function fetchHighscores() {
+  try {
+    const res = await fetch(HIGHSCORE_API);
+    const data = await res.json();
+    highscores = data.scores || [];
+  } catch(e) { highscores = []; }
+}
+
+function qualifiesForHighscore(s) {
+  if (s <= 0) return false;
+  if (highscores.length < 10) return true;
+  return s > highscores[highscores.length - 1].score;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showNameInput() {
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `
+    <h2>💀 GAME OVER</h2>
+    <p>Du hast <strong>${score}</strong> ${score === 1 ? 'Fliege' : 'Fliegen'} gefangen!<br>
+       Du bist in den Top 10! Gib deinen Namen ein:</p>
+    <input type="text" id="nameInput" maxlength="20" placeholder="Dein Name"
+           autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="btn-row">
+      <button class="ov-btn primary" id="btnSubmitScore">Eintragen</button>
+      <button class="ov-btn" id="btnSkipScore">Überspringen</button>
+    </div>`;
+  ov.style.display = 'flex';
+  const inp = document.getElementById('nameInput');
+  inp.focus();
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitHighscore();
+    e.stopPropagation();
+  });
+  document.getElementById('btnSubmitScore').onclick = submitHighscore;
+  document.getElementById('btnSkipScore').onclick  = () => showHighscoreList(-1);
+}
+
+async function submitHighscore() {
+  const inp = document.getElementById('nameInput');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) { if (inp) inp.focus(); return; }
+
+  let hlIdx = -1;
+  try {
+    const res = await fetch(HIGHSCORE_API, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, score})
+    });
+    if (res.status === 403) { showHighscoreList(-1); return; }
+    const data = await res.json();
+    if (data.scores) {
+      highscores = data.scores;
+      hlIdx = highscores.findIndex(s => s.name === name && s.score === score);
+    }
+  } catch(e) { /* ignore */ }
+  showHighscoreList(hlIdx);
+}
+
+function showHighscoreList(hlIdx) {
+  const ov = document.getElementById('overlay');
+  let rows = '';
+  if (highscores.length === 0) {
+    rows = '<tr><td colspan="4" style="text-align:center;color:#888;padding:10px">Noch keine Einträge</td></tr>';
+  } else {
+    highscores.forEach((s, i) => {
+      const hl = i === hlIdx ? ' class="hl"' : '';
+      rows += `<tr${hl}><td>${i+1}.</td><td>${escHtml(s.name)}</td>`
+            + `<td style="text-align:right">${s.score}</td>`
+            + `<td style="color:#4a7a30;font-size:0.85em;padding-left:10px">${escHtml(s.date)}</td></tr>`;
+    });
+  }
+  ov.innerHTML = `
+    <h2>🏆 Highscores</h2>
+    <table id="hs-table">
+      <tr><th>#</th><th>Name</th><th style="text-align:right">Fliegen</th><th></th></tr>
+      ${rows}
+    </table>
+    <div class="btn-row">
+      <button class="ov-btn primary" id="btnNewGame">Neues Spiel</button>
+    </div>`;
+  ov.style.display = 'flex';
+  document.getElementById('btnNewGame').onclick = startGame;
+}
+
+async function onGameEnd() {
+  await fetchHighscores();
+  if (qualifiesForHighscore(score)) {
+    showNameInput();
+  } else {
+    showHighscoreList(-1);
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 function fireTongue() {
   if (tongue.phase !== 'idle') return;
@@ -842,15 +990,11 @@ function startGame() {
   spawnFlyDelayed();
 }
 
-function gameOver() {
-  state = 'gameover';
+async function gameOver() {
+  state = 'overlay';
   fly.active = false;
   clearTimeout(flyTimeout);
-  showOverlay(
-    '💀 GAME OVER',
-    `You caught <strong>${score}</strong> flies!<br>Best: <strong>${best}</strong><br><br>The flies won this round...`,
-    'TRY AGAIN'
-  );
+  await onGameEnd();
 }
 
 // Input
@@ -858,7 +1002,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault();
     if (state === 'playing') fireTongue();
-    else if (state === 'idle' || state === 'gameover') startGame();
+    else if (state === 'idle') startGame();
   }
 });
 
