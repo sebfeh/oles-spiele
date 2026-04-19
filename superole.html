@@ -105,6 +105,66 @@ body {
   #hud { font-size: 13px; padding: 4px 10px; }
   #controls { bottom: 6px; padding: 0 10px; }
 }
+#overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 50;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #fff;
+  font-family: monospace;
+  padding: 20px;
+}
+#overlay.active { display: flex; }
+#overlay h2 { color: #FFD700; font-size: clamp(18px,4vw,28px); margin-bottom: 2px; text-align: center; }
+#overlay .ov-score { font-size: clamp(14px,3vw,20px); color: #aef; }
+#overlay .ov-hint { font-size: clamp(11px,2vw,14px); color: #aaa; text-align: center; }
+#nameInput {
+  background: rgba(255,255,255,0.12);
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  color: #fff;
+  font-family: monospace;
+  font-size: clamp(16px,3vw,22px);
+  padding: 8px 14px;
+  text-align: center;
+  width: min(240px, 80vw);
+  outline: none;
+}
+#nameInput::placeholder { color: #666; }
+.btn-row { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
+.ov-btn {
+  background: rgba(255,215,0,0.15);
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  color: #FFD700;
+  font-family: monospace;
+  font-size: clamp(13px,2.5vw,16px);
+  padding: 8px 18px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.ov-btn:hover, .ov-btn:active { background: rgba(255,215,0,0.32); }
+.ov-btn.primary { background: #FFD700; color: #1a1a2e; font-weight: bold; }
+.ov-btn.primary:hover, .ov-btn.primary:active { background: #ffe033; }
+#hs-table {
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: clamp(12px,2.2vw,15px);
+  width: min(380px, 90vw);
+}
+#hs-table th {
+  color: #FFD700;
+  padding: 4px 10px;
+  text-align: left;
+  border-bottom: 1px solid #555;
+}
+#hs-table td { padding: 4px 10px; }
+#hs-table tr.hl td { color: #FFD700; font-weight: bold; background: rgba(255,215,0,0.1); }
 </style>
 </head>
 <body>
@@ -132,6 +192,8 @@ body {
   </div>
 </div>
 
+<div id="overlay"></div>
+
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -157,6 +219,115 @@ document.addEventListener('keydown',    requestFullscreenLandscape, {once: true}
 
 let score = 0, lives = 3, level = 1, gameState = 'start', cameraX = 0;
 let keys = {};
+
+// ── Highscore ──────────────────────────────────────────────────────────────
+const HIGHSCORE_API = 'highscore.php';
+let highscores = [];
+let hsIsWin = false;
+
+async function fetchHighscores() {
+  try {
+    const res = await fetch(HIGHSCORE_API);
+    const data = await res.json();
+    highscores = data.scores || [];
+  } catch(e) { highscores = []; }
+}
+
+function qualifiesForHighscore(s) {
+  if (s <= 0) return false;
+  if (highscores.length < 10) return true;
+  return s > highscores[highscores.length - 1].score;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showNameInput() {
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `
+    <h2>${hsIsWin ? '🏆 Gewonnen!' : 'Game Over'}</h2>
+    <div class="ov-score">Punkte: ${score}</div>
+    <div class="ov-hint">Du bist in den Top 10!<br>Gib deinen Namen ein:</div>
+    <input type="text" id="nameInput" maxlength="20" placeholder="Dein Name" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="btn-row">
+      <button class="ov-btn primary" id="btnSubmitScore">Eintragen</button>
+      <button class="ov-btn" id="btnSkipScore">Überspringen</button>
+    </div>`;
+  ov.classList.add('active');
+  const inp = document.getElementById('nameInput');
+  inp.focus();
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitHighscore();
+    e.stopPropagation();
+  });
+  document.getElementById('btnSubmitScore').onclick = submitHighscore;
+  document.getElementById('btnSkipScore').onclick  = () => showHighscoreList(-1);
+}
+
+async function submitHighscore() {
+  const inp = document.getElementById('nameInput');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) { if (inp) inp.focus(); return; }
+
+  let hlIdx = -1;
+  try {
+    const res = await fetch(HIGHSCORE_API, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, score})
+    });
+    const data = await res.json();
+    if (data.scores) {
+      highscores = data.scores;
+      hlIdx = highscores.findIndex(s => s.name === name && s.score === score);
+    }
+  } catch(e) { /* ignore */ }
+  showHighscoreList(hlIdx);
+}
+
+function showHighscoreList(hlIdx) {
+  const ov = document.getElementById('overlay');
+  let rows = '';
+  if (highscores.length === 0) {
+    rows = '<tr><td colspan="3" style="text-align:center;color:#888;padding:10px">Noch keine Einträge</td></tr>';
+  } else {
+    highscores.forEach((s, i) => {
+      const hl = i === hlIdx ? ' class="hl"' : '';
+      rows += `<tr${hl}><td>${i+1}.</td><td>${escHtml(s.name)}</td>`
+            + `<td style="text-align:right">${s.score}</td>`
+            + `<td style="color:#666;font-size:0.85em;padding-left:8px">${escHtml(s.date)}</td></tr>`;
+    });
+  }
+  ov.innerHTML = `
+    <h2>🏆 Highscores</h2>
+    <table id="hs-table">
+      <tr><th>#</th><th>Name</th><th style="text-align:right">Punkte</th><th></th></tr>
+      ${rows}
+    </table>
+    <div class="btn-row">
+      <button class="ov-btn primary" id="btnNewGame">Neues Spiel</button>
+    </div>`;
+  ov.classList.add('active');
+  document.getElementById('btnNewGame').onclick = () => {
+    ov.classList.remove('active');
+    ov.innerHTML = '';
+    resetGame();
+  };
+}
+
+async function onGameEnd(win) {
+  hsIsWin = win;
+  gameState = 'overlay';
+  await fetchHighscores();
+  if (qualifiesForHighscore(score)) {
+    showNameInput();
+  } else {
+    showHighscoreList(-1);
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 function makeLevel(n) {
   const platforms = [
@@ -268,7 +439,7 @@ function updatePlayer(inp) {
 function loseLife() {
   lives--;
   document.getElementById('lives').textContent = lives;
-  if (lives <= 0) { gameState='gameover'; return; }
+  if (lives <= 0) { onGameEnd(false); return; }
   initPlayer(); cameraX = 0;
 }
 
@@ -293,7 +464,7 @@ function updateEnemies() {
         player.invincible = 90;
         lives--;
         document.getElementById('lives').textContent = lives;
-        if (lives <= 0) gameState='gameover';
+        if (lives <= 0) onGameEnd(false);
       }
     }
   }
@@ -318,7 +489,7 @@ function checkGoal() {
       player.y+player.h > g.y && player.y < g.y+g.h) {
     level++;
     document.getElementById('levelLabel').textContent='Level '+level;
-    if (level > 3) { gameState='win'; return; }
+    if (level > 3) { onGameEnd(true); return; }
     startLevel();
   }
 }
@@ -592,23 +763,17 @@ function loop() {
 
   if (gameState==='start') {
     drawBG();
-    drawScreen("Ole's Abenteuer", '▲ zum Starten', 'Pfeiltasten oder Buttons steuern');
+    drawScreen("Ole's Abenteuer", '▲ zum Starten', 'Pfeiltasten / Buttons   |   H = Highscores');
     if ((inp.jump && !jumpPrev)||inp.left||inp.right) resetGame();
+    if (keys['h']||keys['H']) {
+      gameState='overlay';
+      fetchHighscores().then(()=>showHighscoreList(-1));
+    }
     jumpPrev=inp.jump;
     requestAnimationFrame(loop); return;
   }
-  if (gameState==='gameover') {
+  if (gameState==='overlay') {
     drawBG();
-    drawScreen('Game Over', 'Punkte: '+score, '▲ für Neustart');
-    if (inp.jump && !jumpPrev) resetGame();
-    jumpPrev=inp.jump;
-    requestAnimationFrame(loop); return;
-  }
-  if (gameState==='win') {
-    drawBG();
-    drawScreen('Gewonnen! 🏆', 'Punkte: '+score+'  Ole ist der Beste!', '▲ für neues Spiel');
-    if (inp.jump && !jumpPrev) resetGame();
-    jumpPrev=inp.jump;
     requestAnimationFrame(loop); return;
   }
 
