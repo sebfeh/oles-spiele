@@ -6,7 +6,13 @@ header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
-$file = __DIR__ . '/highscores.txt';
+$game = preg_replace('/[^a-z0-9_\-]/i', '', $_GET['game'] ?? '');
+if ($game === '') {
+    http_response_code(400);
+    echo json_encode(['error' => 'Kein Spiel angegeben']);
+    exit;
+}
+$file = __DIR__ . '/highscores_' . strtolower($game) . '.txt';
 
 function readScores(string $file): array {
     $scores = [];
@@ -47,6 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($name === '' || $score <= 0 || $score > 99999) {
         http_response_code(400);
         echo json_encode(['error' => 'Ungültige Daten']);
+        exit;
+    }
+
+    if (!file_exists($file)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Spiel nicht gefunden']);
         exit;
     }
 

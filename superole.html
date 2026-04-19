@@ -221,7 +221,7 @@ let score = 0, lives = 3, level = 1, gameState = 'start', cameraX = 0;
 let keys = {};
 
 // ── Highscore ──────────────────────────────────────────────────────────────
-const HIGHSCORE_API = 'highscore.php';
+const HIGHSCORE_API = 'highscore.php?game=superole';
 let highscores = [];
 let hsIsWin = false;
 
@@ -278,6 +278,10 @@ async function submitHighscore() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name, score})
     });
+    if (res.status === 403) {
+      showHighscoreList(-1);
+      return;
+    }
     const data = await res.json();
     if (data.scores) {
       highscores = data.scores;
