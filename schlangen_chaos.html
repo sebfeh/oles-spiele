@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schlangen-Chaos – Oles Spiele</title>
+  <link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0b1e;
+      --ng: #b8ff3e;
+      --np: #ff3eb8;
+      --nb: #3eb8ff;
+      --ny: #ffe83e;
+      --np2: #c87fff;
+      --text: #f0ecff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Nunito', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 1.5rem 1rem 2rem;
+      overflow-x: hidden;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    h1 {
+      font-family: 'Boogaloo', cursive;
+      font-size: clamp(2.2rem, 7vw, 4rem);
+      color: var(--ng);
+      text-shadow: 0 0 20px var(--ng), 0 0 50px rgba(184,255,62,0.3), 3px 3px 0 #2a4a00;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.2rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--nb);
+      text-shadow: 0 0 8px var(--nb);
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    #canvas-wrap {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 50px rgba(184,255,62,0.12), 0 8px 40px rgba(0,0,0,0.8);
+      border: 2px solid rgba(184,255,62,0.25);
+    }
+
+    canvas { display: block; }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(13,11,30,0.93);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.9rem;
+      padding: 2rem 1.5rem;
+      backdrop-filter: blur(3px);
+    }
+
+    #overlay.hidden { display: none; }
+
+    .ov-title {
+      font-family: 'Boogaloo', cursive;
+      font-size: 2.4rem;
+      color: var(--ng);
+      text-shadow: 0 0 20px var(--ng);
+      text-align: center;
+      line-height: 1;
+    }
+
+    .ov-sub {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(240,236,255,0.45);
+      text-align: center;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      font-family: 'Nunito', sans-serif;
+      font-weight: 900;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.55rem 1.8rem;
+      border: 2px solid;
+      border-radius: 3px;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.18s;
+      outline: none;
+    }
+
+    .btn-g { color: var(--ng); border-color: var(--ng); }
+    .btn-g:hover { background: var(--ng); color: var(--bg); box-shadow: 0 0 20px var(--ng); }
+    .btn-p { color: var(--np); border-color: var(--np); }
+    .btn-p:hover { background: var(--np); color: var(--bg); box-shadow: 0 0 20px var(--np); }
+    .btn-b { color: var(--nb); border-color: var(--nb); }
+    .btn-b:hover { background: var(--nb); color: var(--bg); box-shadow: 0 0 20px var(--nb); }
+
+    .ctrl-row {
+      display: flex;
+      gap: 1.8rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .ctrl-col { text-align: center; }
+
+    .ctrl-label {
+      font-size: 0.65rem;
+      font-weight: 900;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+    .ctrl-label.g { color: var(--ng); }
+    .ctrl-label.p { color: var(--np); }
+
+    .key {
+      display: inline-block;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 3px;
+      padding: 0.1rem 0.38rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin: 1px;
+    }
+
+    .pu-legend {
+      display: flex;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .pu-item {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.68rem;
+      color: rgba(240,236,255,0.55);
+    }
+
+    #hud {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 0.6rem;
+      padding: 0 4px;
+    }
+
+    .score {
+      font-family: 'Boogaloo', cursive;
+      font-size: 1.3rem;
+      letter-spacing: 0.05em;
+    }
+    .score.s1 { color: var(--ng); text-shadow: 0 0 10px var(--ng); }
+    .score.s2 { color: var(--np); text-shadow: 0 0 10px var(--np); text-align: right; }
+
+    #pu-status {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 4px;
+      margin-top: 0.25rem;
+      min-height: 1.4rem;
+    }
+
+    .pu-bar { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+
+    .pu-tag {
+      padding: 0.08rem 0.38rem;
+      border-radius: 2px;
+      font-size: 0.62rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      border: 1px solid;
+    }
+
+    .back-link {
+      margin-top: 1.2rem;
+      font-size: 0.72rem;
+      color: rgba(240,236,255,0.28);
+      letter-spacing: 0.1em;
+    }
+    .back-link a { color: var(--nb); text-decoration: none; }
+    .back-link a:hover { text-shadow: 0 0 8px var(--nb); }
+
+    .winner-text {
+      font-family: 'Boogaloo', cursive;
+      font-size: 1.6rem;
+      text-align: center;
+    }
+    .score-row {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .best-badge {
+      font-size: 0.72rem;
+      color: var(--ny);
+      text-shadow: 0 0 8px var(--ny);
+      letter-spacing: 0.1em;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Schlangen-Chaos</h1>
+<p class="subtitle">Power-Ups &bull; Hindernisse &bull; Chaos</p>
+
+<div id="canvas-wrap">
+  <canvas id="game"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<div id="hud">
+  <div class="score s1" id="sc1">🟢 0</div>
+  <div class="score s2" id="sc2" style="display:none">0 🟣</div>
+</div>
+<div id="pu-status">
+  <div class="pu-bar" id="pu1"></div>
+  <div class="pu-bar" id="pu2" style="justify-content:flex-end"></div>
+</div>
+
+<p class="back-link"><a href="index.html">← Zurück zur Spieleübersicht</a></p>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const CELL = 20, COLS = 30, ROWS = 26;
+const W = COLS * CELL, H = ROWS * CELL; // 600 × 520
+
+const PU_DEFS = {
+  speed:   { color: '#ffe83e', glow: '#ffe83e', icon: '⚡', label: 'Turbo',      dur: 7000 },
+  slow:    { color: '#3eb8ff', glow: '#3eb8ff', icon: '🐌', label: 'Zeitlupe',   dur: 6000 },
+  multi:   { color: '#c87fff', glow: '#c87fff', icon: '✨', label: '×2 Score',   dur: 9000 },
+  shield:  { color: '#00ffcc', glow: '#00ffcc', icon: '🛡', label: 'Schild',      dur: 0    },
+  bomb:    { color: '#ff6b35', glow: '#ff6b35', icon: '💥', label: 'Bombe',       dur: 0    },
+  reverse: { color: '#ff9f3e', glow: '#ff9f3e', icon: '🔄', label: 'Steuerung',  dur: 5000 },
+};
+const PU_KEYS = Object.keys(PU_DEFS);
+
+const C = {
+  bg:    '#0d0b1e',
+  grid:  'rgba(255,255,255,0.025)',
+  p1:    '#b8ff3e', p1d: '#2a4a00',
+  p2:    '#ff3eb8', p2d: '#4a0030',
+  food:  '#ffe83e',
+  obs:   '#3a3955', obsL: '#5a5878',
+};
+
+// ─── Canvas Setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('game');
+canvas.width = W; canvas.height = H;
+const ctx = canvas.getContext('2d');
+
+const overlay = document.getElementById('overlay');
+const sc1El   = document.getElementById('sc1');
+const sc2El   = document.getElementById('sc2');
+const pu1El   = document.getElementById('pu1');
+const pu2El   = document.getElementById('pu2');
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let state = 'menu';
+let twoP = false;
+let snakes = [], food = null, powerups = [], obstacles = [], particles = [];
+let shake = 0, lastT = 0, puTimer = 0, obsTimer = 0, gameOverFired = false;
+let bestScore = +localStorage.getItem('sc-best') || 0;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function lerpHex(c1, c2, t) {
+  const p = s => [parseInt(s.slice(1,3),16), parseInt(s.slice(3,5),16), parseInt(s.slice(5,7),16)];
+  const [r1,g1,b1] = p(c1), [r2,g2,b2] = p(c2);
+  return `rgb(${~~(r1+(r2-r1)*t)},${~~(g1+(g2-g1)*t)},${~~(b1+(b2-b1)*t)})`;
+}
+
+function rndCell(exclude) {
+  let x, y, ok;
+  do {
+    x = Math.floor(Math.random() * COLS);
+    y = Math.floor(Math.random() * ROWS);
+    ok = !exclude.some(e => e.x === x && e.y === y);
+  } while (!ok);
+  return {x, y};
+}
+
+function allOccupied() {
+  const out = [];
+  for (const s of snakes) out.push(...s.body);
+  out.push(...obstacles);
+  if (food) out.push(food);
+  out.push(...powerups);
+  return out;
+}
+
+function spawnFood() { food = rndCell(allOccupied()); }
+
+function spawnObs() {
+  let pos, tries = 0;
+  do {
+    pos = rndCell(allOccupied());
+    tries++;
+    const safe = snakes.every(s => Math.abs(s.body[0].x - pos.x) + Math.abs(s.body[0].y - pos.y) > 5);
+    if (safe) break;
+  } while (tries < 60);
+  obstacles.push(pos);
+}
+
+function spawnPU() {
+  if (powerups.length >= 4) return;
+  const pos = rndCell(allOccupied());
+  const type = PU_KEYS[Math.floor(Math.random() * PU_KEYS.length)];
+  const maxLife = 10000 + Math.random() * 4000;
+  powerups.push({...pos, type, life: maxLife, maxLife});
+}
+
+function boom(px, py, color, n = 12) {
+  for (let i = 0; i < n; i++) {
+    particles.push({
+      x: px, y: py,
+      vx: (Math.random()-.5)*7, vy: (Math.random()-.5)*7,
+      life: 450 + Math.random()*300, maxLife: 750,
+      color, size: 2 + Math.random()*4,
+    });
+  }
+}
+
+// ─── Snake ───────────────────────────────────────────────────────────────────
+class Snake {
+  constructor(id, sx, sy, dx, dy, color, dark, ctrl) {
+    this.id = id;
+    this.color = color; this.dark = dark; this.ctrl = ctrl;
+    this.body = [];
+    for (let i = 0; i < 4; i++) this.body.push({x: sx - dx*i, y: sy - dy*i});
+    this.dir  = {x: dx, y: dy};
+    this.next = {x: dx, y: dy};
+    this.score = 0; this.alive = true;
+    this.grow = 0;
+    this.shield = false; this.reversed = false;
+    this.timers = {};
+    this.baseSpeed = 7; this.speed = 7;
+    this.multi = 1; this.accum = 0;
+    this.deathT = 0;
+  }
+
+  get head() { return this.body[0]; }
+
+  turn(dx, dy) {
+    if (this.body.length > 1) {
+      const n = this.body[1];
+      if (this.body[0].x + dx === n.x && this.body[0].y + dy === n.y) return;
+    }
+    this.next = {x: dx, y: dy};
+  }
+
+  move() {
+    this.dir = {...this.next};
+    const h = this.body[0];
+    this.body.unshift({x: h.x + this.dir.x, y: h.y + this.dir.y});
+    if (this.grow > 0) this.grow--;
+    else this.body.pop();
+  }
+
+  applyPU(type) {
+    const d = PU_DEFS[type];
+    switch (type) {
+      case 'speed':   this.timers.speed   = d.dur; this.speed = this.baseSpeed * 1.85; break;
+      case 'slow':    this.timers.slow    = d.dur; this.speed = this.baseSpeed * 0.5;  break;
+      case 'multi':   this.timers.multi   = d.dur; this.multi = 2;                      break;
+      case 'shield':  this.shield = true;  this.timers.shield  = 1;                     break;
+      case 'reverse': this.reversed = true; this.timers.reverse = d.dur;                break;
+      case 'bomb':
+        const target = Math.max(3, Math.floor(this.body.length / 2));
+        this.body = this.body.slice(0, target);
+        boom(this.head.x*CELL+CELL/2, this.head.y*CELL+CELL/2, this.color, 16);
+        break;
+    }
+  }
+
+  tickPUs(dt) {
+    for (const [k, v] of Object.entries(this.timers)) {
+      if (k === 'shield') continue;
+      this.timers[k] -= dt;
+      if (this.timers[k] <= 0) {
+        delete this.timers[k];
+        if (k === 'speed' || k === 'slow') {
+          this.speed = this.baseSpeed;
+          if (this.timers.speed) this.speed = this.baseSpeed * 1.85;
+          else if (this.timers.slow) this.speed = this.baseSpeed * 0.5;
+        }
+        if (k === 'multi')   this.multi = 1;
+        if (k === 'reverse') this.reversed = false;
+      }
+    }
+  }
+
+  addScore(base) { this.score += Math.round(base * this.multi); }
+
+  occupies(x, y) { return this.body.some(s => s.x === x && s.y === y); }
+
+  draw(now) {
+    const n = this.body.length;
+    ctx.shadowBlur = 0;
+    for (let i = n - 1; i >= 0; i--) {
+      const seg = this.body[i];
+      const fade = this.alive ? 1 : Math.max(0, 1 - this.deathT / 600);
+      ctx.globalAlpha = fade;
+      ctx.shadowBlur  = i === 0 ? 18 : 8;
+      ctx.shadowColor = this.color;
+      ctx.fillStyle   = i === 0 ? this.color : lerpHex(this.color, this.dark, (i/n)*0.75);
+      const pad = i === 0 ? 1 : 2;
+      rrect(seg.x*CELL+pad, seg.y*CELL+pad, CELL-pad*2, CELL-pad*2, i === 0 ? 5 : 3);
+      ctx.fill();
+
+      // shield ring
+      if (i === 0 && this.shield) {
+        const p = 0.4 + 0.2 * Math.sin(now * 0.006);
+        ctx.globalAlpha = p;
+        ctx.shadowBlur = 25; ctx.shadowColor = '#00ffcc';
+        ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2;
+        rrect(seg.x*CELL-2, seg.y*CELL-2, CELL+4, CELL+4, 7);
+        ctx.stroke();
+      }
+
+      // reverse tint
+      if (i === 0 && this.reversed) {
+        const p = 0.3 + 0.2 * Math.sin(now * 0.01);
+        ctx.globalAlpha = p;
+        ctx.fillStyle = '#ff9f3e';
+        rrect(seg.x*CELL+pad, seg.y*CELL+pad, CELL-pad*2, CELL-pad*2, 5);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+
+    if (this.alive) this.drawEyes();
+  }
+
+  drawEyes() {
+    const h = this.body[0], d = this.dir;
+    const px = h.x*CELL, py = h.y*CELL;
+    let e1, e2;
+    if      (d.x === 1)  { e1={x:px+13,y:py+5};  e2={x:px+13,y:py+13}; }
+    else if (d.x ===-1)  { e1={x:px+5, y:py+5};  e2={x:px+5, y:py+13}; }
+    else if (d.y ===-1)  { e1={x:px+5, y:py+5};  e2={x:px+13,y:py+5};  }
+    else                 { e1={x:px+5, y:py+13}; e2={x:px+13,y:py+13}; }
+    ctx.fillStyle='#fff';
+    [e1,e2].forEach(e=>{ctx.beginPath();ctx.arc(e.x,e.y,2.5,0,Math.PI*2);ctx.fill();});
+    ctx.fillStyle='#111';
+    [e1,e2].forEach(e=>{ctx.beginPath();ctx.arc(e.x+.5,e.y+.5,1.2,0,Math.PI*2);ctx.fill();});
+  }
+}
+
+// ─── Input ───────────────────────────────────────────────────────────────────
+const keys = new Set();
+document.addEventListener('keydown', e => {
+  keys.add(e.key);
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (e.key === 'Escape') {
+    if (state === 'playing') { state = 'paused'; showPause(); }
+    else if (state === 'paused') resume();
+  }
+});
+document.addEventListener('keyup', e => keys.delete(e.key));
+
+function handleInput() {
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    const c = s.ctrl, r = s.reversed;
+    if (keys.has(c.u)) s.turn(0,  r ? 1 :-1);
+    if (keys.has(c.d)) s.turn(0,  r ?-1 : 1);
+    if (keys.has(c.l)) s.turn(r ? 1:-1, 0);
+    if (keys.has(c.r)) s.turn(r ?-1: 1, 0);
+  }
+}
+
+// ─── Collision / Pickups ─────────────────────────────────────────────────────
+function checkCollisions() {
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    const h = s.head;
+    if (h.x < 0 || h.x >= COLS || h.y < 0 || h.y >= ROWS ||
+        obstacles.some(o => o.x===h.x && o.y===h.y) ||
+        s.body.slice(1).some(b => b.x===h.x && b.y===h.y)) {
+      kill(s); continue;
+    }
+    for (const o of snakes) {
+      if (o === s || !o.alive) continue;
+      if (o.body.some(b => b.x===h.x && b.y===h.y)) { kill(s); break; }
+    }
+  }
+}
+
+function kill(s) {
+  if (s.shield) {
+    s.shield = false; delete s.timers.shield;
+    shake = 250; boom(s.head.x*CELL+CELL/2, s.head.y*CELL+CELL/2, '#00ffcc', 14);
+    return;
+  }
+  s.alive = false;
+  shake = 450; boom(s.head.x*CELL+CELL/2, s.head.y*CELL+CELL/2, s.color, 22);
+  checkEnd();
+}
+
+function checkEnd() {
+  if (gameOverFired) return;
+  const alive = snakes.filter(s => s.alive);
+  if (twoP ? alive.length <= 1 : alive.length === 0) {
+    gameOverFired = true;
+    setTimeout(() => { state = 'gameover'; showGameOver(); }, 700);
+  }
+}
+
+function checkPickups() {
+  for (const s of snakes) {
+    if (!s.alive) continue;
+    const h = s.head;
+    if (food && h.x===food.x && h.y===food.y) {
+      s.grow += 3; s.addScore(10);
+      boom(h.x*CELL+CELL/2, h.y*CELL+CELL/2, C.food, 7);
+      spawnFood();
+      obsTimer -= 500;
+    }
+    for (let i = powerups.length-1; i >= 0; i--) {
+      const pu = powerups[i];
+      if (h.x!==pu.x || h.y!==pu.y) continue;
+      // bomb & reverse hit opponent in 2P mode
+      const hitsOpponent = twoP && (pu.type==='bomb' || pu.type==='reverse');
+      const target = hitsOpponent ? snakes.find(o => o!==s && o.alive) : s;
+      if (target) target.applyPU(pu.type);
+      s.addScore(5);
+      boom(pu.x*CELL+CELL/2, pu.y*CELL+CELL/2, PU_DEFS[pu.type].color, 9);
+      powerups.splice(i, 1);
+    }
+  }
+}
+
+// ─── Draw ─────────────────────────────────────────────────────────────────────
+function drawBg() {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = C.grid; ctx.lineWidth = 0.5;
+  for (let x=0; x<=COLS; x++) { ctx.beginPath(); ctx.moveTo(x*CELL,0); ctx.lineTo(x*CELL,H); ctx.stroke(); }
+  for (let y=0; y<=ROWS; y++) { ctx.beginPath(); ctx.moveTo(0,y*CELL); ctx.lineTo(W,y*CELL); ctx.stroke(); }
+}
+
+function drawObs() {
+  for (const o of obstacles) {
+    const x=o.x*CELL, y=o.y*CELL;
+    ctx.shadowBlur=6; ctx.shadowColor='rgba(80,80,120,0.4)';
+    ctx.fillStyle=C.obs;   rrect(x+1,y+1,CELL-2,CELL-2,3); ctx.fill();
+    ctx.fillStyle=C.obsL;  rrect(x+3,y+3,CELL-6,CELL-6,2); ctx.fill();
+    ctx.fillStyle=C.obs;   rrect(x+5,y+5,CELL-10,CELL-10,1); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+}
+
+function drawFood(now) {
+  if (!food) return;
+  const pulse = 0.85 + 0.15*Math.sin(now*0.004);
+  const px=food.x*CELL+CELL/2, py=food.y*CELL+CELL/2;
+  ctx.save();
+  ctx.shadowBlur=18+pulse*18; ctx.shadowColor=C.food;
+  ctx.fillStyle=C.food;
+  ctx.translate(px, py);
+  ctx.scale(pulse, pulse);
+  star(0, 0, 5, 7, 4);
+  ctx.fill();
+  ctx.restore();
+  ctx.shadowBlur=0;
+}
+
+function star(cx, cy, spikes, outer, inner) {
+  const step = Math.PI / spikes;
+  let rot = -Math.PI/2;
+  ctx.beginPath();
+  ctx.moveTo(cx + Math.cos(rot)*outer, cy + Math.sin(rot)*outer);
+  for (let i=0; i<spikes; i++) {
+    rot += step; ctx.lineTo(cx+Math.cos(rot)*inner, cy+Math.sin(rot)*inner);
+    rot += step; ctx.lineTo(cx+Math.cos(rot)*outer, cy+Math.sin(rot)*outer);
+  }
+  ctx.closePath();
+}
+
+function drawPUs(now) {
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for (const pu of powerups) {
+    const d = PU_DEFS[pu.type];
+    const pulse = 0.5+0.5*Math.sin(now*0.004);
+    const fade  = pu.life/pu.maxLife < 0.3
+      ? (pu.life/pu.maxLife/0.3) * (0.5+0.5*Math.sin(now*0.012))
+      : 1;
+    const px=pu.x*CELL, py=pu.y*CELL;
+    ctx.globalAlpha=fade;
+    ctx.shadowBlur=12+pulse*16; ctx.shadowColor=d.glow;
+    ctx.fillStyle=d.color;
+    rrect(px+2,py+2,CELL-4,CELL-4,5); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.font=`${CELL-8}px serif`;
+    ctx.fillText(d.icon, px+CELL/2, py+CELL/2);
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+
+function drawParticles(dt) {
+  for (let i=particles.length-1; i>=0; i--) {
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vx*=0.91; p.vy*=0.91; p.life-=dt;
+    if (p.life<=0) { particles.splice(i,1); continue; }
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.color; ctx.shadowBlur=5; ctx.shadowColor=p.color;
+    ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+  }
+  ctx.globalAlpha=1; ctx.shadowBlur=0;
+}
+
+// ─── HUD ─────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  sc1El.textContent = `🟢 ${snakes[0].score}`;
+  if (twoP && snakes[1]) sc2El.textContent = `${snakes[1].score} 🟣`;
+
+  renderPUBar(pu1El, snakes[0]);
+  if (twoP && snakes[1]) renderPUBar(pu2El, snakes[1]);
+}
+
+function renderPUBar(el, s) {
+  el.innerHTML = '';
+  for (const [k, v] of Object.entries(s.timers)) {
+    const d = PU_DEFS[k]; if (!d) continue;
+    const tag = document.createElement('span');
+    tag.className = 'pu-tag';
+    tag.style.cssText = `background:${d.color}22;color:${d.color};border-color:${d.color}`;
+    tag.textContent = k==='shield' ? `${d.icon} Schild` : `${d.icon} ${Math.ceil(v/1000)}s`;
+    el.appendChild(tag);
+  }
+}
+
+// ─── Overlay screens ─────────────────────────────────────────────────────────
+function showOverlay(html) {
+  overlay.innerHTML = html;
+  overlay.classList.remove('hidden');
+}
+function hideOverlay() { overlay.classList.add('hidden'); }
+
+function showMenu() {
+  state = 'menu';
+  showOverlay(`
+    <div class="ov-title">🐍 Schlangen-Chaos</div>
+    <div class="ov-sub">Power-Ups · Hindernisse · Chaos</div>
+    <div class="btn-row">
+      <button class="btn btn-g" onclick="start(false)">1 Spieler</button>
+      <button class="btn btn-p" onclick="start(true)">2 Spieler</button>
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-col">
+        <div class="ctrl-label g">Spieler 1</div>
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+      </div>
+      <div class="ctrl-col">
+        <div class="ctrl-label p">Spieler 2</div>
+        <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
+      </div>
+    </div>
+    <div class="pu-legend">
+      ${PU_KEYS.map(k=>`
+        <div class="pu-item">
+          <span style="background:${PU_DEFS[k].color}33;border:1px solid ${PU_DEFS[k].color};
+            border-radius:3px;padding:1px 4px;font-size:0.75rem">${PU_DEFS[k].icon}</span>
+          ${PU_DEFS[k].label}
+        </div>`).join('')}
+    </div>
+    <div class="ov-sub">ESC = Pause &nbsp;|&nbsp; 💥🔄 treffen im 2P-Modus den Gegner</div>
+  `);
+}
+
+function showPause() {
+  showOverlay(`
+    <div class="ov-title" style="color:var(--nb)">Pause</div>
+    <div class="btn-row">
+      <button class="btn btn-b" onclick="resume()">Weiter</button>
+      <button class="btn btn-g" onclick="showMenu()">Hauptmenü</button>
+    </div>
+    <div class="ov-sub">ESC = Weiter</div>
+  `);
+}
+
+function showGameOver() {
+  let winner = '';
+  if (twoP) {
+    const a1 = snakes[0].alive, a2 = snakes[1].alive;
+    if (a1 && !a2) winner = `<div class="winner-text" style="color:var(--ng)">🏆 Spieler 1 gewinnt!</div>`;
+    else if (a2 && !a1) winner = `<div class="winner-text" style="color:var(--np)">🏆 Spieler 2 gewinnt!</div>`;
+    else winner = `<div class="winner-text" style="color:var(--ny)">🤝 Unentschieden!</div>`;
+  }
+
+  let newBest = '';
+  if (!twoP && snakes[0].score > bestScore) {
+    bestScore = snakes[0].score;
+    localStorage.setItem('sc-best', bestScore);
+    newBest = `<div class="best-badge">⭐ Neuer Highscore!</div>`;
+  }
+
+  const scores = twoP
+    ? `<div class="score-row">
+        <span style="color:var(--ng)">🟢 ${snakes[0].score} Pkt.</span>
+        <span style="color:var(--np)">🟣 ${snakes[1].score} Pkt.</span>
+       </div>`
+    : `<div style="font-size:1rem;font-weight:700">
+        Punkte: <span style="color:var(--ny)">${snakes[0].score}</span>
+        &nbsp;|&nbsp; Bestmarke: <span style="color:var(--ny)">${bestScore}</span>
+       </div>`;
+
+  showOverlay(`
+    <div class="ov-title" style="color:var(--np)">Game Over</div>
+    ${winner}
+    ${newBest}
+    ${scores}
+    <div class="btn-row">
+      <button class="btn btn-g" onclick="start(${twoP})">Nochmal</button>
+      <button class="btn btn-b" onclick="showMenu()">Hauptmenü</button>
+    </div>
+  `);
+}
+
+function resume() {
+  state = 'playing';
+  hideOverlay();
+  lastT = performance.now();
+  requestAnimationFrame(loop);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function start(two) {
+  twoP = two; snakes=[]; food=null; powerups=[]; obstacles=[]; particles=[];
+  shake=0; puTimer=3500; obsTimer=8000; gameOverFired=false;
+  lastT=0;
+
+  snakes.push(new Snake(1, 7, Math.floor(ROWS/2), 1,0, C.p1,C.p1d, {u:'w',d:'s',l:'a',r:'d'}));
+  if (twoP) snakes.push(new Snake(2, COLS-8, Math.floor(ROWS/2), -1,0, C.p2,C.p2d, {u:'ArrowUp',d:'ArrowDown',l:'ArrowLeft',r:'ArrowRight'}));
+
+  for (let i=0; i<7; i++) spawnObs();
+  spawnFood();
+
+  sc2El.style.display = twoP ? 'block' : 'none';
+  pu2El.style.display = twoP ? 'flex'  : 'none';
+
+  state = 'playing';
+  hideOverlay();
+  requestAnimationFrame(loop);
+}
+
+// ─── Main Loop ───────────────────────────────────────────────────────────────
+function loop(now) {
+  if (state !== 'playing') return;
+  const dt = Math.min(now - (lastT||now), 100);
+  lastT = now;
+
+  handleInput();
+
+  for (const s of snakes) {
+    if (!s.alive) { s.deathT += dt; continue; }
+    s.tickPUs(dt);
+    s.accum += dt;
+    const interval = 1000 / s.speed;
+    while (s.accum >= interval) { s.move(); s.accum -= interval; }
+  }
+
+  checkCollisions();
+  checkPickups();
+
+  puTimer -= dt;
+  if (puTimer <= 0) { spawnPU(); puTimer = 4500 + Math.random()*3000; }
+
+  for (let i=powerups.length-1; i>=0; i--) { powerups[i].life-=dt; if(powerups[i].life<=0) powerups.splice(i,1); }
+
+  obsTimer -= dt;
+  if (obsTimer <= 0 && obstacles.length < 18) { spawnObs(); obsTimer = 9000+Math.random()*5000; }
+
+  if (shake > 0) shake -= dt;
+
+  updateHUD();
+
+  // Draw
+  ctx.save();
+  if (shake > 0) {
+    const s = Math.min(5, shake/80);
+    ctx.translate((Math.random()-.5)*s*2, (Math.random()-.5)*s*2);
+  }
+  drawBg();
+  drawObs();
+  drawFood(now);
+  drawPUs(now);
+  for (const s of snakes) s.draw(now);
+  drawParticles(dt);
+  ctx.restore();
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+showMenu();
+</script>
+</body>
+</html>
