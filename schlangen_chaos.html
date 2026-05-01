@@ -311,9 +311,9 @@ let bestScore = +localStorage.getItem('sc-best') || 0;
 let difficulty = 'einfach';
 
 const DIFFICULTY = {
-  einfach:     { speed: 3,  label: 'Einfach',     btn: 'btn-g' },
-  schwer:      { speed: 9,  label: 'Schwer',       btn: 'btn-b' },
-  superschwer: { speed: 14, label: 'Superschwer',  btn: 'btn-p' },
+  einfach:     { speed: 3,  label: 'Einfach',     btn: 'btn-g', lives: 5 },
+  schwer:      { speed: 9,  label: 'Schwer',       btn: 'btn-b', lives: 3 },
+  superschwer: { speed: 14, label: 'Superschwer',  btn: 'btn-p', lives: 1 },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -389,6 +389,7 @@ class Snake {
   constructor(id, sx, sy, dx, dy, color, dark, ctrl, baseSpeed = 7) {
     this.id = id;
     this.color = color; this.dark = dark; this.ctrl = ctrl;
+    this.startX = sx; this.startY = sy; this.startDx = dx; this.startDy = dy;
     this.body = [];
     for (let i = 0; i < 4; i++) this.body.push({x: sx - dx*i, y: sy - dy*i});
     this.dir  = {x: dx, y: dy};
@@ -400,6 +401,21 @@ class Snake {
     this.baseSpeed = baseSpeed; this.speed = baseSpeed;
     this.multi = 1; this.accum = 0;
     this.deathT = 0;
+    this.lives = 1; this.invincible = 0;
+  }
+
+  respawn() {
+    this.body = [];
+    for (let i = 0; i < 4; i++) this.body.push({x: this.startX - this.startDx*i, y: this.startY - this.startDy*i});
+    this.dir = {x: this.startDx, y: this.startDy};
+    this.next = {x: this.startDx, y: this.startDy};
+    this.grow = 0;
+    this.shield = false; this.reversed = false;
+    this.timers = {};
+    this.speed = this.baseSpeed;
+    this.multi = 1; this.accum = 0;
+    this.alive = true;
+    this.invincible = 2500;
   }
 
   get head() { return this.body[0]; }
@@ -458,6 +474,7 @@ class Snake {
   occupies(x, y) { return this.body.some(s => s.x === x && s.y === y); }
 
   draw(now) {
+    if (this.invincible > 0 && Math.floor(now / 120) % 2 === 0) return;
     const n = this.body.length;
     ctx.shadowBlur = 0;
     for (let i = n - 1; i >= 0; i--) {
@@ -514,7 +531,7 @@ class Snake {
 const keys = new Set();
 document.addEventListener('keydown', e => {
   keys.add(e.key);
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','w','a','s','d'].includes(e.key)) e.preventDefault();
   if (e.key === 'Escape') {
     if (state === 'playing') { state = 'paused'; showPause(); }
     else if (state === 'paused') resume();
@@ -536,7 +553,7 @@ function handleInput() {
 // ─── Collision / Pickups ─────────────────────────────────────────────────────
 function checkCollisions() {
   for (const s of snakes) {
-    if (!s.alive) continue;
+    if (!s.alive || s.invincible > 0) continue;
     const h = s.head;
     if (h.x < 0 || h.x >= COLS || h.y < 0 || h.y >= ROWS ||
         obstacles.some(o => o.x===h.x && o.y===h.y) ||
@@ -554,6 +571,12 @@ function kill(s) {
   if (s.shield) {
     s.shield = false; delete s.timers.shield;
     shake = 250; boom(s.head.x*CELL+CELL/2, s.head.y*CELL+CELL/2, '#00ffcc', 14);
+    return;
+  }
+  s.lives--;
+  if (s.lives > 0) {
+    shake = 300; boom(s.head.x*CELL+CELL/2, s.head.y*CELL+CELL/2, s.color, 16);
+    s.respawn();
     return;
   }
   s.alive = false;
@@ -675,9 +698,11 @@ function drawParticles(dt) {
 }
 
 // ─── HUD ─────────────────────────────────────────────────────────────────────
+function livesStr(n) { return '❤️'.repeat(Math.max(0, n)); }
+
 function updateHUD() {
-  sc1El.textContent = `🟢 ${snakes[0].score}`;
-  if (twoP && snakes[1]) sc2El.textContent = `${snakes[1].score} 🟣`;
+  sc1El.textContent = `🟢 ${snakes[0].score}  ${livesStr(snakes[0].lives)}`;
+  if (twoP && snakes[1]) sc2El.textContent = `${livesStr(snakes[1].lives)}  ${snakes[1].score} 🟣`;
 
   renderPUBar(pu1El, snakes[0]);
   if (twoP && snakes[1]) renderPUBar(pu2El, snakes[1]);
@@ -720,11 +745,11 @@ function showMenu() {
     <div class="ctrl-row">
       <div class="ctrl-col">
         <div class="ctrl-label g">Spieler 1</div>
-        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+        <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
       </div>
       <div class="ctrl-col">
         <div class="ctrl-label p">Spieler 2</div>
-        <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
       </div>
     </div>
     <div class="pu-legend">
@@ -774,6 +799,9 @@ function showGameOver() {
     : `<div style="font-size:1rem;font-weight:700">
         Punkte: <span style="color:var(--ny)">${snakes[0].score}</span>
         &nbsp;|&nbsp; Bestmarke: <span style="color:var(--ny)">${bestScore}</span>
+       </div>
+       <div style="font-size:0.72rem;color:rgba(240,236,255,0.4);letter-spacing:0.1em">
+         ${DIFFICULTY[difficulty].label} · ${DIFFICULTY[difficulty].lives} ${DIFFICULTY[difficulty].lives===1?'Leben':'Leben'}
        </div>`;
 
   showOverlay(`
@@ -802,8 +830,13 @@ function start(two) {
   lastT=0;
 
   const spd = DIFFICULTY[difficulty].speed;
-  snakes.push(new Snake(1, 7, Math.floor(ROWS/2), 1,0, C.p1,C.p1d, {u:'w',d:'s',l:'a',r:'d'}, spd));
-  if (twoP) snakes.push(new Snake(2, COLS-8, Math.floor(ROWS/2), -1,0, C.p2,C.p2d, {u:'ArrowUp',d:'ArrowDown',l:'ArrowLeft',r:'ArrowRight'}, spd));
+  const startLives = DIFFICULTY[difficulty].lives;
+  snakes.push(new Snake(1, 7, Math.floor(ROWS/2), 1,0, C.p1,C.p1d, {u:'ArrowUp',d:'ArrowDown',l:'ArrowLeft',r:'ArrowRight'}, spd));
+  snakes[0].lives = startLives;
+  if (twoP) {
+    snakes.push(new Snake(2, COLS-8, Math.floor(ROWS/2), -1,0, C.p2,C.p2d, {u:'w',d:'s',l:'a',r:'d'}, spd));
+    snakes[1].lives = startLives;
+  }
 
   for (let i=0; i<7; i++) spawnObs();
   spawnFood();
@@ -826,6 +859,7 @@ function loop(now) {
 
   for (const s of snakes) {
     if (!s.alive) { s.deathT += dt; continue; }
+    if (s.invincible > 0) s.invincible = Math.max(0, s.invincible - dt);
     s.tickPUs(dt);
     s.accum += dt;
     const interval = 1000 / s.speed;
