@@ -308,6 +308,13 @@ let twoP = false;
 let snakes = [], food = null, powerups = [], obstacles = [], particles = [];
 let shake = 0, lastT = 0, puTimer = 0, obsTimer = 0, gameOverFired = false;
 let bestScore = +localStorage.getItem('sc-best') || 0;
+let difficulty = 'einfach';
+
+const DIFFICULTY = {
+  einfach:     { speed: 5,  label: 'Einfach',     btn: 'btn-g' },
+  schwer:      { speed: 9,  label: 'Schwer',       btn: 'btn-b' },
+  superschwer: { speed: 14, label: 'Superschwer',  btn: 'btn-p' },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function rrect(x, y, w, h, r) {
@@ -379,7 +386,7 @@ function boom(px, py, color, n = 12) {
 
 // ─── Snake ───────────────────────────────────────────────────────────────────
 class Snake {
-  constructor(id, sx, sy, dx, dy, color, dark, ctrl) {
+  constructor(id, sx, sy, dx, dy, color, dark, ctrl, baseSpeed = 7) {
     this.id = id;
     this.color = color; this.dark = dark; this.ctrl = ctrl;
     this.body = [];
@@ -390,7 +397,7 @@ class Snake {
     this.grow = 0;
     this.shield = false; this.reversed = false;
     this.timers = {};
-    this.baseSpeed = 7; this.speed = 7;
+    this.baseSpeed = baseSpeed; this.speed = baseSpeed;
     this.multi = 1; this.accum = 0;
     this.deathT = 0;
   }
@@ -697,9 +704,15 @@ function hideOverlay() { overlay.classList.add('hidden'); }
 
 function showMenu() {
   state = 'menu';
+  const diffBtns = Object.entries(DIFFICULTY).map(([key, d]) => {
+    const active = difficulty === key ? `background:${key==='einfach'?'var(--ng)':key==='schwer'?'var(--nb)':'var(--np)'};color:var(--bg);` : '';
+    return `<button class="btn ${d.btn}" style="${active}" onclick="difficulty='${key}';showMenu()">${d.label}</button>`;
+  }).join('');
   showOverlay(`
     <div class="ov-title">🐍 Schlangen-Chaos</div>
     <div class="ov-sub">Power-Ups · Hindernisse · Chaos</div>
+    <div class="ov-sub" style="margin-bottom:0.2rem">Schwierigkeit</div>
+    <div class="btn-row">${diffBtns}</div>
     <div class="btn-row">
       <button class="btn btn-g" onclick="start(false)">1 Spieler</button>
       <button class="btn btn-p" onclick="start(true)">2 Spieler</button>
@@ -788,8 +801,9 @@ function start(two) {
   shake=0; puTimer=3500; obsTimer=8000; gameOverFired=false;
   lastT=0;
 
-  snakes.push(new Snake(1, 7, Math.floor(ROWS/2), 1,0, C.p1,C.p1d, {u:'w',d:'s',l:'a',r:'d'}));
-  if (twoP) snakes.push(new Snake(2, COLS-8, Math.floor(ROWS/2), -1,0, C.p2,C.p2d, {u:'ArrowUp',d:'ArrowDown',l:'ArrowLeft',r:'ArrowRight'}));
+  const spd = DIFFICULTY[difficulty].speed;
+  snakes.push(new Snake(1, 7, Math.floor(ROWS/2), 1,0, C.p1,C.p1d, {u:'w',d:'s',l:'a',r:'d'}, spd));
+  if (twoP) snakes.push(new Snake(2, COLS-8, Math.floor(ROWS/2), -1,0, C.p2,C.p2d, {u:'ArrowUp',d:'ArrowDown',l:'ArrowLeft',r:'ArrowRight'}, spd));
 
   for (let i=0; i<7; i++) spawnObs();
   spawnFood();
